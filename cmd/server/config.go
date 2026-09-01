@@ -896,63 +896,6 @@ func SaveGeoFilter(configDir string, gf *GeoFilterConfig) error {
 	return nil
 }
 
-// SaveRegions writes the regions section back to config.json on disk. Pass
-// an empty/nil map to clear all configured region names (observers then
-// fall back to displaying their raw IATA code). The rest of config.json is
-// preserved as-is. Mirrors SaveGeoFilter.
-func SaveRegions(configDir string, regions map[string]string) error {
-	var configPath string
-	for _, p := range []string{
-		filepath.Join(configDir, "config.json"),
-		filepath.Join(configDir, "data", "config.json"),
-	} {
-		if _, err := os.Stat(p); err == nil {
-			configPath = p
-			break
-		}
-	}
-	if configPath == "" {
-		return fmt.Errorf("config.json not found in %s", configDir)
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("read config: %w", err)
-	}
-
-	// Parse as a raw map so non-struct fields (_comment, etc.) are preserved.
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse config: %w", err)
-	}
-
-	if len(regions) == 0 {
-		delete(raw, "regions")
-	} else {
-		b, _ := json.Marshal(regions)
-		var v interface{}
-		_ = json.Unmarshal(b, &v)
-		raw["regions"] = v
-	}
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	out = append(out, '\n')
-
-	// Atomic write: temp file + rename.
-	tmp := configPath + ".tmp"
-	if err := os.WriteFile(tmp, out, 0644); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-	if err := os.Rename(tmp, configPath); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename config: %w", err)
-	}
-	return nil
-}
-
 // obsBlacklistSet lazily builds and caches the observerBlacklist as a set for O(1) lookups.
 func (c *Config) obsBlacklistSet() map[string]bool {
 	c.obsBlacklistOnce.Do(func() {

@@ -72,8 +72,8 @@ func routeDescriptions() map[string]routeMeta {
 		"GET /api/admin/nodes/infrastructure/status": {Summary: "Poll an infrastructure-toggle request", Description: "Returns pending/done/error for a previously-enqueued infrastructure-flag request.", Tag: "admin", Auth: true},
 
 		// Region name management (admin panel). Unlike infrastructure
-		// flags above, config.json is owned directly by cmd/server, so
-		// these write synchronously — no ingestor queue/poll needed.
+		// flags above, admin.db is owned read-write directly by cmd/server,
+		// so these write synchronously — no ingestor queue/poll needed.
 		"GET /api/admin/regions": {Summary: "Get regions for editing", Description: "Returns the configured code -> display name map plus every IATA code observed in the DB, so the admin UI can surface codes seen on the network that don't have a friendly name yet.", Tag: "admin", Auth: true},
 		"PUT /api/admin/regions": {Summary: "Replace the region name map", Description: "Full-replace: the request body's regions map becomes the new content of admin.db's regions table.", Tag: "admin", Auth: true},
 
