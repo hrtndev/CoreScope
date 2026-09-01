@@ -15,6 +15,8 @@
   let wsHandler = null;
   let heatLayer = null;
   let geoFilterLayer = null;
+  let scopeCoverageLayer = null;
+  let scopeCoverageData = null; // last-fetched /api/scope-coverage response, kept for theme re-render
   let affinityLayer = null;
   let affinityData = null;
   let userHasMoved = false;
@@ -223,6 +225,8 @@
             <label for="mcHashLabels"><input type="checkbox" id="mcHashLabels"> Hash prefix labels</label>
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
+            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of node positions per matched MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage</label>
+            <div id="mcScopeCoverageLegend" style="display:none;margin-top:4px;padding-left:20px;"></div>
           </fieldset>
           <div id="mapAreaFilter"></div>
           <fieldset class="mc-section">
@@ -611,6 +615,28 @@
           });
         }
       } catch (e) { /* no geo filter configured */ }
+    })();
+
+    // Hash-region coverage overlay
+    (async function () {
+      try {
+        var data = await api('/scope-coverage', { ttl: 30000 });
+        if (!data || !data.regions || !data.regions.length) return;
+        scopeCoverageData = data;
+        var label = document.getElementById('mcScopeCoverageLabel');
+        var el = document.getElementById('mcScopeCoverage');
+        if (label) label.style.display = '';
+        if (el) {
+          var saved = localStorage.getItem('meshcore-map-scope-coverage');
+          if (saved === 'true') el.checked = true;
+          el.addEventListener('change', function (e) {
+            localStorage.setItem('meshcore-map-scope-coverage', e.target.checked);
+            if (!scopeCoverageLayer) return;
+            if (e.target.checked) { scopeCoverageLayer.addTo(map); } else { map.removeLayer(scopeCoverageLayer); }
+          });
+        }
+        renderScopeCoverageLayer();
+      } catch (e) { /* no hash regions configured / endpoint unavailable */ }
     })();
 
     // WS for live advert updates
@@ -1978,6 +2004,8 @@
     routeLayer = null;
     if (heatLayer) { heatLayer = null; }
     geoFilterLayer = null;
+    scopeCoverageLayer = null;
+    scopeCoverageData = null;
     selectedReferenceNode = null;
     neighborPubkeys = null;
     delete window._mapSelectRefNode;
@@ -2017,6 +2045,81 @@
   }
 
   let _themeRefreshHandler = null;
+
+  // ─── Hash Region Coverage Overlay ──────────────────────────────────────────
+  // Renders /api/scope-coverage's per-region convex hulls as colored map
+  // shapes — an inferred coverage area (from where matched nodes actually
+  // are), not an authoritative boundary; hash regions carry no shape of
+  // their own. See cmd/server/scope_coverage.go.
+
+  // Deterministic string -> 8-hex-char digest (FNV-1a 32-bit) so region
+  // names (arbitrary strings like "#eu", not hex hashes) can feed
+  // HashColor.hashToHsl the same way packet-hash coloring does elsewhere
+  // (live.js, packets.js) — same visual language, no new color system.
+  function _regionNameToHex(name) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < name.length; i++) {
+      h ^= name.charCodeAt(i);
+      h = (h * 0x01000193) >>> 0;
+    }
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+
+  function _isDarkTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ||
+      (document.documentElement.getAttribute('data-theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
+  function renderScopeCoverageLegend(theme) {
+    var legendEl = document.getElementById('mcScopeCoverageLegend');
+    if (!legendEl) return;
+    if (!scopeCoverageData || !scopeCoverageData.regions || !scopeCoverageData.regions.length) {
+      legendEl.style.display = 'none';
+      legendEl.innerHTML = '';
+      return;
+    }
+    legendEl.style.display = '';
+    legendEl.innerHTML = scopeCoverageData.regions.map(function (region) {
+      var color = window.HashColor ? HashColor.hashToHsl(_regionNameToHex(region.name), theme) : '#888';
+      return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-top:2px;">' +
+        '<span style="width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>' +
+        safeEsc(region.name) + ' <span style="color:var(--text-subtle)">(' + region.nodeCount + ')</span></div>';
+    }).join('');
+  }
+
+  // Rebuilds scopeCoverageLayer from scopeCoverageData. Called on initial
+  // load and again on theme-refresh (colors are baked into shape styles
+  // via HashColor, not CSS vars, so they need an explicit re-render —
+  // same reason renderMarkers() re-runs on theme-refresh for roles).
+  function renderScopeCoverageLayer() {
+    if (scopeCoverageLayer) { map.removeLayer(scopeCoverageLayer); scopeCoverageLayer = null; }
+    if (!scopeCoverageData || !scopeCoverageData.regions || !scopeCoverageData.regions.length) return;
+    var theme = _isDarkTheme() ? 'dark' : 'light';
+    var shapes = [];
+    scopeCoverageData.regions.forEach(function (region) {
+      var hull = region.hull || [];
+      var colorHex = _regionNameToHex(region.name);
+      var fill = window.HashColor ? HashColor.hashToHsl(colorHex, theme) : '#888';
+      var outline = window.HashColor ? HashColor.hashToOutline(colorHex, theme) : '#444';
+      var shape;
+      if (hull.length >= 3) {
+        shape = L.polygon(hull, { color: outline, weight: 2, opacity: 0.8, fillColor: fill, fillOpacity: 0.15 });
+      } else if (hull.length === 2) {
+        shape = L.polyline(hull, { color: outline, weight: 3, opacity: 0.8, dashArray: '4 4' });
+      } else if (hull.length === 1) {
+        shape = L.circleMarker(hull[0], { radius: 10, color: outline, weight: 2, fillColor: fill, fillOpacity: 0.6 });
+      } else {
+        return;
+      }
+      shape.bindPopup('<strong>' + safeEsc(region.name) + '</strong><br>' + region.nodeCount + ' node' + (region.nodeCount === 1 ? '' : 's'));
+      shapes.push(shape);
+    });
+    scopeCoverageLayer = L.layerGroup(shapes);
+    var el = document.getElementById('mcScopeCoverage');
+    if (el && el.checked) scopeCoverageLayer.addTo(map);
+    renderScopeCoverageLegend(theme);
+  }
+  // ─── End Hash Region Coverage Overlay ──────────────────────────────────────
 
   // ─── Affinity Debug Overlay ────────────────────────────────────────────────
   function clearAffinityOverlay() {
@@ -2109,7 +2212,7 @@
 
   registerPage('map', {
     init: function(app, routeParam) {
-      _themeRefreshHandler = () => { if (markerLayer) renderMarkers(); };
+      _themeRefreshHandler = () => { if (markerLayer) renderMarkers(); renderScopeCoverageLayer(); };
       window.addEventListener('theme-refresh', _themeRefreshHandler);
       return init(app, routeParam);
     },

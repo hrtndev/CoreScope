@@ -120,6 +120,32 @@ type ScopeStatsResponse struct {
 	TimeSeries []ScopeTimePoint   `json:"timeSeries"`
 }
 
+// ─── Scope Coverage ─────────────────────────────────────────────────────────────
+
+// ScopeCoveragePoint is a [lat, lon] pair — matches the geo_filter polygon
+// point convention elsewhere in this codebase (cmd/server/config.go's
+// AreaEntry.Polygon), not GeoJSON's [lon, lat] order.
+type ScopeCoveragePoint [2]float64
+
+// ScopeCoverageRegion is one hash region's inferred coverage area — the
+// convex hull of every member node's position. Hash regions carry no
+// authoritative shape of their own (internal/admindb's hash_regions table
+// is just names), so this is an approximation, not a boundary.
+type ScopeCoverageRegion struct {
+	Name string `json:"name"`
+	// NodeCount is every contributing node, not just hull vertices.
+	NodeCount int `json:"nodeCount"`
+	// Hull is in ring order, not closed (first point isn't repeated).
+	// 0 points never appears (the region is omitted from Regions
+	// entirely). 1 point: render as a marker, not a polygon. 2 points:
+	// render as a line. 3+: a fillable polygon.
+	Hull []ScopeCoveragePoint `json:"hull"`
+}
+
+type ScopeCoverageResponse struct {
+	Regions []ScopeCoverageRegion `json:"regions"`
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 
 type MemoryStats struct {
