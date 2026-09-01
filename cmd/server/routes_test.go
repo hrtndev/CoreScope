@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/meshcore-analyzer/admindb"
 	"github.com/meshcore-analyzer/prunequeue"
 )
 
@@ -1845,14 +1846,18 @@ func TestConfigCacheWithCustomTTL(t *testing.T) {
 func TestConfigRegionsWithCustomRegions(t *testing.T) {
 	db := setupTestDB(t)
 	seedTestData(t, db)
-	cfg := &Config{
-		Port: 3000,
-		Regions: map[string]string{
-			"LAX": "Los Angeles",
-		},
-	}
+	cfg := &Config{Port: 3000}
 	hub := NewHub()
 	srv := NewServer(db, cfg, hub)
+	adminStore, err := admindb.Open(filepath.Join(t.TempDir(), "admin.db"))
+	if err != nil {
+		t.Fatalf("admindb.Open: %v", err)
+	}
+	t.Cleanup(func() { adminStore.Close() })
+	if err := adminStore.ReplaceRegions(map[string]string{"LAX": "Los Angeles"}); err != nil {
+		t.Fatalf("ReplaceRegions: %v", err)
+	}
+	srv.admin = adminStore
 	router := mux.NewRouter()
 	srv.RegisterRoutes(router)
 

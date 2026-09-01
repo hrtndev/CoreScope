@@ -74,13 +74,13 @@ func routeDescriptions() map[string]routeMeta {
 		// flags above, config.json is owned directly by cmd/server, so
 		// these write synchronously — no ingestor queue/poll needed.
 		"GET /api/admin/regions": {Summary: "Get regions for editing", Description: "Returns the configured code -> display name map plus every IATA code observed in the DB, so the admin UI can surface codes seen on the network that don't have a friendly name yet.", Tag: "admin", Auth: true},
-		"PUT /api/admin/regions": {Summary: "Replace the region name map", Description: "Full-replace: the request body's regions map becomes the new config.json regions section.", Tag: "admin", Auth: true},
+		"PUT /api/admin/regions": {Summary: "Replace the region name map", Description: "Full-replace: the request body's regions map becomes the new content of admin.db's regions table.", Tag: "admin", Auth: true},
 
 		// Hash-region management: MeshCore transport-scope names (e.g.
 		// "#eu") the ingestor hashes to derive HMAC scope-matching keys.
 		// Distinct from /api/admin/regions above (IATA display names).
-		"GET /api/admin/hash-regions": {Summary: "Get hashRegions for editing", Description: "Returns the current hashRegions list from config.json. Read fresh from disk — cmd/server keeps no in-memory copy since only the ingestor consumes this value.", Tag: "admin", Auth: true},
-		"PUT /api/admin/hash-regions": {Summary: "Replace the hashRegions list", Description: "Full-replace: the request body's hashRegions list becomes the new config.json hashRegions section. Takes effect within ~15s — the ingestor re-checks config.json on its prune-request-queue ticker and hot-swaps its derived HMAC keys, no restart needed.", Tag: "admin", Auth: true},
+		"GET /api/admin/hash-regions": {Summary: "Get hashRegions for editing", Description: "Returns the current hashRegions list from admin.db's hash_regions table.", Tag: "admin", Auth: true},
+		"PUT /api/admin/hash-regions": {Summary: "Replace the hashRegions list", Description: "Full-replace: the request body's hashRegions list becomes the new content of admin.db's hash_regions table. Takes effect within ~15s — the ingestor holds a read-only connection to admin.db and re-checks this table on its prune-request-queue ticker, hot-swapping its derived HMAC keys, no restart needed.", Tag: "admin", Auth: true},
 
 		// Packets
 		"GET /api/packets": {Summary: "List packets", Description: "Returns decoded packets with filtering, sorting, and pagination.", Tag: "packets",

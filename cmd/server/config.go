@@ -103,6 +103,14 @@ type Config struct {
 
 	Regions map[string]string `json:"regions"`
 
+	// HashRegions is read only for a one-time startup migration (see
+	// main.go): hashRegions used to live in config.json, but is now
+	// DB-backed (admindb's hash_regions table, CRUD'd via
+	// /api/admin/hash-regions) so cmd/server can write it directly instead
+	// of only editing a file the ingestor has to poll. Not used anywhere
+	// else — the live source of truth is admin.db.
+	HashRegions []string `json:"hashRegions,omitempty"`
+
 	Roles            map[string]interface{} `json:"roles"`
 	HealthThresholds *HealthThresholds      `json:"healthThresholds"`
 	Map              map[string]interface{} `json:"map"`
@@ -925,100 +933,6 @@ func SaveRegions(configDir string, regions map[string]string) error {
 		var v interface{}
 		_ = json.Unmarshal(b, &v)
 		raw["regions"] = v
-	}
-
-	out, err := json.MarshalIndent(raw, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	out = append(out, '\n')
-
-	// Atomic write: temp file + rename.
-	tmp := configPath + ".tmp"
-	if err := os.WriteFile(tmp, out, 0644); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-	if err := os.Rename(tmp, configPath); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename config: %w", err)
-	}
-	return nil
-}
-
-// LoadHashRegions reads the current "hashRegions" list straight from
-// config.json on disk. Unlike the rest of Config, hashRegions has no
-// in-memory copy on the Server: it's consumed only by the ingestor process,
-// which derives its HMAC region keys at startup and re-derives them every
-// ~15s thereafter (reloadRegionKeys in cmd/ingestor/main.go, piggybacked on
-// the prune-request-queue ticker) so admin edits apply without a restart.
-// Reading fresh from disk here means the admin UI always reflects the true
-// on-disk value rather than a stale server-side cache.
-func LoadHashRegions(configDir string) ([]string, error) {
-	var configPath string
-	for _, p := range []string{
-		filepath.Join(configDir, "config.json"),
-		filepath.Join(configDir, "data", "config.json"),
-	} {
-		if _, err := os.Stat(p); err == nil {
-			configPath = p
-			break
-		}
-	}
-	if configPath == "" {
-		return nil, fmt.Errorf("config.json not found in %s", configDir)
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
-	}
-
-	var raw struct {
-		HashRegions []string `json:"hashRegions"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-	return raw.HashRegions, nil
-}
-
-// SaveHashRegions writes the hashRegions section back to config.json on
-// disk. Pass an empty/nil slice to clear it. The rest of config.json is
-// preserved as-is. Mirrors SaveGeoFilter/SaveRegions. Takes effect within
-// ~15s, no ingestor restart needed — see LoadHashRegions.
-func SaveHashRegions(configDir string, regions []string) error {
-	var configPath string
-	for _, p := range []string{
-		filepath.Join(configDir, "config.json"),
-		filepath.Join(configDir, "data", "config.json"),
-	} {
-		if _, err := os.Stat(p); err == nil {
-			configPath = p
-			break
-		}
-	}
-	if configPath == "" {
-		return fmt.Errorf("config.json not found in %s", configDir)
-	}
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("read config: %w", err)
-	}
-
-	// Parse as a raw map so non-struct fields (_comment, etc.) are preserved.
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse config: %w", err)
-	}
-
-	if len(regions) == 0 {
-		delete(raw, "hashRegions")
-	} else {
-		b, _ := json.Marshal(regions)
-		var v interface{}
-		_ = json.Unmarshal(b, &v)
-		raw["hashRegions"] = v
 	}
 
 	out, err := json.MarshalIndent(raw, "", "  ")

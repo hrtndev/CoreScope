@@ -834,8 +834,7 @@ func TestIATAFilterDoesNotDropStatusMessages(t *testing.T) {
 }
 
 func TestLoadRegionKeys(t *testing.T) {
-	cfg := &Config{HashRegions: []string{"#belgium", "eu", "  #Test  ", "", "#belgium"}}
-	keys := loadRegionKeys(cfg)
+	keys := loadRegionKeys([]string{"#belgium", "eu", "  #Test  ", "", "#belgium"})
 
 	// Deduplication + normalization
 	if len(keys) != 3 {

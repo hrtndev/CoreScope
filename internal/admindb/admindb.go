@@ -132,6 +132,25 @@ func ensureSchema(db *sql.DB) error {
 			last_seen_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin_id ON admin_sessions(admin_id)`,
+		// hash_regions holds the MeshCore transport-scope names (e.g. "#eu")
+		// the ingestor hashes into HMAC keys for scope-matching. Storing
+		// these here — rather than in meshcore.db or config.json — means
+		// cmd/server can CRUD them directly: it's the one process with a
+		// writable handle onto admin.db, same as admin accounts above.
+		`CREATE TABLE IF NOT EXISTS hash_regions (
+			name       TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL
+		)`,
+		// regions holds the IATA observer code -> friendly display name
+		// map used by the region filter UI. Distinct from hash_regions
+		// above — same word ("region"), unrelated concept. Only cmd/server
+		// ever reads this (the ingestor has no use for display names), so
+		// unlike hash_regions there's no ReadOnlyStore reader for it.
+		`CREATE TABLE IF NOT EXISTS regions (
+			code       TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -383,6 +402,134 @@ func (s *Store) ListAdmins() ([]*Admin, error) {
 		out = append(out, &a)
 	}
 	return out, rows.Err()
+}
+
+// ListHashRegions returns every configured hash-region name, alphabetically.
+func (s *Store) ListHashRegions() ([]string, error) {
+	return listHashRegions(s.db)
+}
+
+// ReplaceHashRegions atomically replaces the full hash-region set with
+// names — full-replace semantics, mirroring how the admin UI submits its
+// complete edited list (same as PUT /api/admin/regions for IATA names).
+// Callers are expected to have already normalized/deduped/validated names
+// (see handleAdminPutHashRegions).
+func (s *Store) ReplaceHashRegions(names []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if Commit succeeded
+
+	if _, err := tx.Exec(`DELETE FROM hash_regions`); err != nil {
+		return fmt.Errorf("clear hash_regions: %w", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, name := range names {
+		if _, err := tx.Exec(`INSERT INTO hash_regions (name, created_at) VALUES (?, ?)`, name, now); err != nil {
+			return fmt.Errorf("insert hash_region %q: %w", name, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ListRegions returns the configured IATA code -> display name map.
+func (s *Store) ListRegions() (map[string]string, error) {
+	rows, err := s.db.Query(`SELECT code, name FROM regions`)
+	if err != nil {
+		return nil, fmt.Errorf("query regions: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var code, name string
+		if err := rows.Scan(&code, &name); err != nil {
+			return nil, fmt.Errorf("scan region: %w", err)
+		}
+		out[code] = name
+	}
+	return out, rows.Err()
+}
+
+// ReplaceRegions atomically replaces the full code -> display name map —
+// full-replace semantics, mirroring how the admin UI submits its complete
+// edited map. Callers are expected to have already normalized/validated
+// entries (see handleAdminPutRegions).
+func (s *Store) ReplaceRegions(regions map[string]string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op if Commit succeeded
+
+	if _, err := tx.Exec(`DELETE FROM regions`); err != nil {
+		return fmt.Errorf("clear regions: %w", err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for code, name := range regions {
+		if _, err := tx.Exec(`INSERT INTO regions (code, name, created_at) VALUES (?, ?, ?)`, code, name, now); err != nil {
+			return fmt.Errorf("insert region %q: %w", code, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// listHashRegions is shared by Store (read-write, cmd/server) and
+// ReadOnlyStore (read-only, cmd/ingestor) so both query the same SQL.
+func listHashRegions(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`SELECT name FROM hash_regions ORDER BY name ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("query hash_regions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan hash_region: %w", err)
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// ReadOnlyStore is a read-only handle onto admin.db for processes that
+// only need to read admin-managed config, never write it — writes to
+// admin.db are owned exclusively by cmd/server (mirrors the read-only
+// invariant cmd/server itself enforces on meshcore.db, just inverted: here
+// the ingestor is the reader, cmd/server is the sole writer). Used by the
+// ingestor to poll hash_regions so admin-portal edits apply without a
+// restart (see reloadRegionKeys in cmd/ingestor/main.go).
+type ReadOnlyStore struct {
+	db *sql.DB
+}
+
+// OpenReadOnly opens admin.db at path in SQLite mode=ro. Returns an error
+// if the file doesn't exist yet (e.g. cmd/server hasn't created it on this
+// volume yet) — callers on a retry loop should treat that as transient.
+func OpenReadOnly(path string) (*ReadOnlyStore, error) {
+	dsn := fmt.Sprintf("file:%s?mode=ro&_journal_mode=WAL&_busy_timeout=5000", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open admin db read-only: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ping admin db read-only: %w", err)
+	}
+	return &ReadOnlyStore{db: db}, nil
+}
+
+// Close closes the underlying database connection.
+func (s *ReadOnlyStore) Close() error {
+	return s.db.Close()
+}
+
+// ListHashRegions returns every configured hash-region name, alphabetically.
+func (s *ReadOnlyStore) ListHashRegions() ([]string, error) {
+	return listHashRegions(s.db)
 }
 
 func hashToken(token string) string {

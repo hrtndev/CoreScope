@@ -43,14 +43,16 @@ type MQTTLegacy struct {
 
 // Config holds the ingestor configuration, compatible with the Node.js config.json format.
 type Config struct {
-	DBPath             string                  `json:"dbPath"`
-	MQTT               *MQTTLegacy             `json:"mqtt,omitempty"`
-	MQTTSources        []MQTTSource            `json:"mqttSources,omitempty"`
-	LogLevel           string                  `json:"logLevel,omitempty"`
-	ChannelKeysPath    string                  `json:"channelKeysPath,omitempty"`
-	ChannelKeys        map[string]string       `json:"channelKeys,omitempty"`
-	HashChannels       []string                `json:"hashChannels,omitempty"`
-	HashRegions        []string                `json:"hashRegions,omitempty"`
+	DBPath          string            `json:"dbPath"`
+	MQTT            *MQTTLegacy       `json:"mqtt,omitempty"`
+	MQTTSources     []MQTTSource      `json:"mqttSources,omitempty"`
+	LogLevel        string            `json:"logLevel,omitempty"`
+	ChannelKeysPath string            `json:"channelKeysPath,omitempty"`
+	ChannelKeys     map[string]string `json:"channelKeys,omitempty"`
+	HashChannels    []string          `json:"hashChannels,omitempty"`
+	// hashRegions is intentionally NOT parsed here anymore: it's DB-backed
+	// (admin.db's hash_regions table, owned by cmd/server) now, not
+	// config.json. See regionKeySource in main.go.
 	Retention          *RetentionConfig        `json:"retention,omitempty"`
 	Metrics            *MetricsConfig          `json:"metrics,omitempty"`
 	Runtime            *RuntimeConfig          `json:"runtime,omitempty"`
@@ -335,25 +337,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-// LoadHashRegionsFromFile reads just the "hashRegions" field from a
-// config.json path — no env var overrides, no MQTT source defaulting, none
-// of LoadConfig's other side effects. Used by reloadRegionKeys (main.go) to
-// cheaply re-check hashRegions on a ticker so admin-portal edits (PUT
-// /api/admin/hash-regions) take effect without restarting the ingestor.
-func LoadHashRegionsFromFile(path string) ([]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var raw struct {
-		HashRegions []string `json:"hashRegions"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
-	return raw.HashRegions, nil
 }
 
 // ResolvedSources returns the final list of MQTT sources to connect to.

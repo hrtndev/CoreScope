@@ -264,12 +264,6 @@
       "lonMax": -121.75
     }
   },
-  "regions": {
-    "SJC": "San Jose, US",
-    "SFO": "San Francisco, US",
-    "OAK": "Oakland, US",
-    "MRY": "Monterey, US"
-  },
   "cacheTTL": {
     "stats": 10,
     "nodeDetail": 300,
@@ -363,14 +357,10 @@
   "_comment_clientRxCoverage": "Opt-in mobile client-RX coverage (corescope-rx companions publishing GPS-tagged receptions to meshcore/client/<pubkey>/packets). Default OFF: when disabled the ingestor writes no client_receptions, the /api/rx-coverage|rx-leaderboard|nodes/{pubkey}/rx-coverage endpoints 404, and the UI hides the Coverage dashboard + Reach overlay. Set enabled=true to turn it on. SINGLE FLAG, BOTH PROCESSES: the ingestor and server each parse this same config.json, so this one clientRxCoverage.enabled entry gates both the ingest write path and the read endpoints — set it once, not per-process. TRUST: the feature requires an ACL-capable broker binding meshcore/client/{pubkey}/packets to that publisher; without ACLs the companion GPS is spoofable (see docs/client-rx-coverage.md). Retention: see retention.clientRxDays. Companion app + setup: https://github.com/efiten/corescope-rx.",
   "_comment_channelKeys": "Hex keys for decrypting channel messages. Key name = channel display name. public channel key is well-known.",
   "_comment_hashChannels": "Channel names whose keys are derived via SHA256. Key = SHA256(name)[:16]. Listed here so the ingestor can auto-derive keys.",
-  "hashRegions": [
-    "#belgium",
-    "#eu"
-  ],
-  "_comment_hashRegions": "Region names for scope matching on transport-route packets. Key = SHA256('#name')[:16]. Add any region names used by nodes in your network.",
+  "_comment_hashRegions": "Region names for scope matching on transport-route packets (SHA256('#name')[:16] derives the HMAC key) are no longer configured here — manage them at /admin/hash-regions instead. They're stored in admin.db's hash_regions table, editable from the admin panel; the ingestor picks up changes within ~15s, no restart needed.",
   "_comment_defaultRegion": "IATA code shown by default in region filters.",
   "_comment_mapDefaults": "Initial map center [lat, lon] and zoom level.",
-  "_comment_regions": "IATA code → display name mapping for the region filter UI. Each key is a 3-letter IATA code that an observer is tagged with (resolved priority: MQTT payload `region` field > topic-derived region > mqttSources.region). Observers without an IATA tag will not appear under any region filter — only under 'All Regions'. The region filter dropdown shows one entry per code listed here PLUS any extra IATA codes the server discovers from observers at runtime (so you can omit codes here and they will still be selectable, just labelled with the bare IATA code instead of a friendly name). Selecting 'All Regions' (or no region) returns results from every observer including those with no IATA tag; selecting one or more codes restricts results to packets observed by observers tagged with those codes. The reserved value 'All' (case-insensitive) is treated as 'no filter' on the server, so the URL ?region=All behaves identically to omitting the param. Issue #770.",
+  "_comment_regions": "The IATA code → display name map for the region filter UI is no longer configured here — manage it at /admin/regions instead (stored in admin.db's regions table). Each code is a 3-letter IATA code an observer is tagged with (resolved priority: MQTT payload `region` field > topic-derived region > mqttSources.region). Observers without an IATA tag will not appear under any region filter — only under 'All Regions'. The region filter dropdown shows one entry per code configured in the admin panel PLUS any extra IATA codes the server discovers from observers at runtime (so you can leave a code unconfigured there and it will still be selectable, just labelled with the bare IATA code instead of a friendly name). Selecting 'All Regions' (or no region) returns results from every observer including those with no IATA tag; selecting one or more codes restricts results to packets observed by observers tagged with those codes. The reserved value 'All' (case-insensitive) is treated as 'no filter' on the server, so the URL ?region=All behaves identically to omitting the param. Issue #770.",
 
   "analytics": {
     "defaultIntervalSeconds": 300,
