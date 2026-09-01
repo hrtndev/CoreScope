@@ -403,3 +403,150 @@ func TestDeleteOtherSessionsDoesNotAffectOtherAdmins(t *testing.T) {
 		t.Fatalf("a2's session should be untouched: %v", err)
 	}
 }
+
+func TestHashRegionsReplaceAndList(t *testing.T) {
+	s := openTestStore(t)
+
+	// Empty initially.
+	got, err := s.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ListHashRegions: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("initial ListHashRegions = %v, want empty", got)
+	}
+
+	if err := s.ReplaceHashRegions([]string{"#eu", "#belgium"}); err != nil {
+		t.Fatalf("ReplaceHashRegions: %v", err)
+	}
+	got, err = s.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ListHashRegions: %v", err)
+	}
+	// Alphabetical order per the ORDER BY name in listHashRegions.
+	if want := []string{"#belgium", "#eu"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("ListHashRegions = %v, want %v", got, want)
+	}
+
+	// Full-replace semantics: a second call replaces, doesn't merge.
+	if err := s.ReplaceHashRegions([]string{"#usa"}); err != nil {
+		t.Fatalf("ReplaceHashRegions (2nd): %v", err)
+	}
+	got, err = s.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ListHashRegions: %v", err)
+	}
+	if want := []string{"#usa"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("ListHashRegions after replace = %v, want %v", got, want)
+	}
+
+	// Empty slice clears everything.
+	if err := s.ReplaceHashRegions(nil); err != nil {
+		t.Fatalf("ReplaceHashRegions(nil): %v", err)
+	}
+	got, err = s.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ListHashRegions: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ListHashRegions after clear = %v, want empty", got)
+	}
+}
+
+func TestRegionsReplaceAndList(t *testing.T) {
+	s := openTestStore(t)
+
+	got, err := s.ListRegions()
+	if err != nil {
+		t.Fatalf("ListRegions: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("initial ListRegions = %v, want empty", got)
+	}
+
+	if err := s.ReplaceRegions(map[string]string{"SJC": "San Jose, US", "OAK": "Oakland, US"}); err != nil {
+		t.Fatalf("ReplaceRegions: %v", err)
+	}
+	got, err = s.ListRegions()
+	if err != nil {
+		t.Fatalf("ListRegions: %v", err)
+	}
+	want := map[string]string{"SJC": "San Jose, US", "OAK": "Oakland, US"}
+	if len(got) != len(want) || got["SJC"] != want["SJC"] || got["OAK"] != want["OAK"] {
+		t.Fatalf("ListRegions = %v, want %v", got, want)
+	}
+
+	// Full-replace semantics.
+	if err := s.ReplaceRegions(map[string]string{"MRY": "Monterey, US"}); err != nil {
+		t.Fatalf("ReplaceRegions (2nd): %v", err)
+	}
+	got, err = s.ListRegions()
+	if err != nil {
+		t.Fatalf("ListRegions: %v", err)
+	}
+	if len(got) != 1 || got["MRY"] != "Monterey, US" {
+		t.Fatalf("ListRegions after replace = %v, want {MRY: Monterey, US}", got)
+	}
+}
+
+func TestReadOnlyStoreSeesWriterChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "admin.db")
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	if err := s.ReplaceHashRegions([]string{"#eu"}); err != nil {
+		t.Fatalf("ReplaceHashRegions: %v", err)
+	}
+
+	ro, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatalf("OpenReadOnly: %v", err)
+	}
+	t.Cleanup(func() { ro.Close() })
+
+	got, err := ro.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ReadOnlyStore.ListHashRegions: %v", err)
+	}
+	if want := []string{"#eu"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("ReadOnlyStore.ListHashRegions = %v, want %v", got, want)
+	}
+
+	// Writer-side changes must be visible to the reader without reopening
+	// the connection — this is exactly what cmd/ingestor's 15s reload
+	// ticker depends on.
+	if err := s.ReplaceHashRegions([]string{"#eu", "#belgium"}); err != nil {
+		t.Fatalf("ReplaceHashRegions (2nd): %v", err)
+	}
+	got, err = ro.ListHashRegions()
+	if err != nil {
+		t.Fatalf("ReadOnlyStore.ListHashRegions (2nd): %v", err)
+	}
+	if want := []string{"#belgium", "#eu"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("ReadOnlyStore.ListHashRegions after writer change = %v, want %v", got, want)
+	}
+}
+
+func TestOpenReadOnlyMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := OpenReadOnly(filepath.Join(dir, "does-not-exist.db")); err == nil {
+		t.Fatal("OpenReadOnly on a nonexistent file: want error, got nil")
+	}
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

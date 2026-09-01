@@ -36,12 +36,14 @@ type paramMeta struct {
 func routeDescriptions() map[string]routeMeta {
 	return map[string]routeMeta{
 		// Config
-		"GET /api/config/cache":      {Summary: "Get cache configuration", Tag: "config"},
-		"GET /api/config/client":     {Summary: "Get client configuration", Tag: "config"},
-		"GET /api/config/regions":    {Summary: "Get configured regions", Tag: "config"},
-		"GET /api/config/theme":      {Summary: "Get theme configuration", Description: "Returns color maps, CSS variables, and theme defaults.", Tag: "config"},
-		"GET /api/config/map":        {Summary: "Get map configuration", Tag: "config"},
-		"GET /api/config/geo-filter": {Summary: "Get geo-filter configuration", Tag: "config"},
+		"GET /api/config/cache":        {Summary: "Get cache configuration", Tag: "config"},
+		"GET /api/config/client":       {Summary: "Get client configuration", Tag: "config"},
+		"GET /api/config/regions":      {Summary: "Get configured regions", Tag: "config"},
+		"GET /api/config/regions/list": {Summary: "Get region names as a JSON string array", Description: "Flattened, deduplicated, alphabetically sorted list of region display names. Intended for simple integrations (e.g. a Discord bot) that just need to know what regions currently exist.", Tag: "config"},
+		"GET /api/config/hash-regions": {Summary: "Get hashRegions as a JSON string array", Description: "Public, unauthenticated counterpart to GET /api/admin/hash-regions. Returns the configured MeshCore transport-scope names (e.g. \"#eu\") as a plain JSON array, alphabetically sorted.", Tag: "config"},
+		"GET /api/config/theme":        {Summary: "Get theme configuration", Description: "Returns color maps, CSS variables, and theme defaults.", Tag: "config"},
+		"GET /api/config/map":          {Summary: "Get map configuration", Tag: "config"},
+		"GET /api/config/geo-filter":   {Summary: "Get geo-filter configuration", Tag: "config"},
 
 		// Admin / system
 		"GET /api/health":      {Summary: "Health check", Description: "Returns server health, uptime, and memory stats.", Tag: "admin"},
@@ -68,6 +70,18 @@ func routeDescriptions() map[string]routeMeta {
 		// (see internal/infraqueue) rather than writing directly.
 		"POST /api/admin/nodes/infrastructure":       {Summary: "Toggle a node's infrastructure flag", Description: "Enqueues a request for the ingestor to set/clear nodes.infrastructure by exact public key. Returns 202 with a requestId to poll. Available to any logged-in admin (not just super_admin).", Tag: "admin", Auth: true},
 		"GET /api/admin/nodes/infrastructure/status": {Summary: "Poll an infrastructure-toggle request", Description: "Returns pending/done/error for a previously-enqueued infrastructure-flag request.", Tag: "admin", Auth: true},
+
+		// Region name management (admin panel). Unlike infrastructure
+		// flags above, admin.db is owned read-write directly by cmd/server,
+		// so these write synchronously — no ingestor queue/poll needed.
+		"GET /api/admin/regions": {Summary: "Get regions for editing", Description: "Returns the configured code -> display name map plus every IATA code observed in the DB, so the admin UI can surface codes seen on the network that don't have a friendly name yet.", Tag: "admin", Auth: true},
+		"PUT /api/admin/regions": {Summary: "Replace the region name map", Description: "Full-replace: the request body's regions map becomes the new content of admin.db's regions table.", Tag: "admin", Auth: true},
+
+		// Hash-region management: MeshCore transport-scope names (e.g.
+		// "#eu") the ingestor hashes to derive HMAC scope-matching keys.
+		// Distinct from /api/admin/regions above (IATA display names).
+		"GET /api/admin/hash-regions": {Summary: "Get hashRegions for editing", Description: "Returns the current hashRegions list from admin.db's hash_regions table.", Tag: "admin", Auth: true},
+		"PUT /api/admin/hash-regions": {Summary: "Replace the hashRegions list", Description: "Full-replace: the request body's hashRegions list becomes the new content of admin.db's hash_regions table. Takes effect within ~15s — the ingestor holds a read-only connection to admin.db and re-checks this table on its prune-request-queue ticker, hot-swapping its derived HMAC keys, no restart needed.", Tag: "admin", Auth: true},
 
 		// Packets
 		"GET /api/packets": {Summary: "List packets", Description: "Returns decoded packets with filtering, sorting, and pagination.", Tag: "packets",

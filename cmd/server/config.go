@@ -103,6 +103,14 @@ type Config struct {
 
 	Regions map[string]string `json:"regions"`
 
+	// HashRegions is read only for a one-time startup migration (see
+	// main.go): hashRegions used to live in config.json, but is now
+	// DB-backed (admindb's hash_regions table, CRUD'd via
+	// /api/admin/hash-regions) so cmd/server can write it directly instead
+	// of only editing a file the ingestor has to poll. Not used anywhere
+	// else — the live source of truth is admin.db.
+	HashRegions []string `json:"hashRegions,omitempty"`
+
 	Roles            map[string]interface{} `json:"roles"`
 	HealthThresholds *HealthThresholds      `json:"healthThresholds"`
 	Map              map[string]interface{} `json:"map"`

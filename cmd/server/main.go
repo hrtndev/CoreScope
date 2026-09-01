@@ -85,6 +85,50 @@ func waitForObservationsTable(dbPath string) {
 	}
 }
 
+// migrateConfigJSONRegions one-time-seeds admin.db's "regions" and
+// "hash_regions" tables from config.json's legacy "regions"/"hashRegions"
+// keys, if and only if the corresponding DB table is currently empty. This
+// only ever runs meaningfully once per deployment (the first boot after
+// upgrading): once an operator has anything in the DB — whether migrated
+// or entered directly via the admin panel — later boots see a non-empty
+// table and skip straight past. config.json itself is left untouched;
+// its "regions"/"hashRegions" keys are simply no longer read after this.
+func migrateConfigJSONRegions(cfg *Config, adminStore *admindb.Store) {
+	if len(cfg.Regions) > 0 {
+		if existing, err := adminStore.ListRegions(); err != nil {
+			log.Printf("[regions] migration check failed: %v", err)
+		} else if len(existing) == 0 {
+			if err := adminStore.ReplaceRegions(cfg.Regions); err != nil {
+				log.Printf("[regions] migration from config.json failed: %v", err)
+			} else {
+				log.Printf("[regions] migrated %d entries from config.json to admin.db (config.json's \"regions\" key is no longer read — safe to remove)", len(cfg.Regions))
+			}
+		}
+	}
+
+	if len(cfg.HashRegions) > 0 {
+		if existing, err := adminStore.ListHashRegions(); err != nil {
+			log.Printf("[hash-regions] migration check failed: %v", err)
+		} else if len(existing) == 0 {
+			seen := make(map[string]bool, len(cfg.HashRegions))
+			names := make([]string, 0, len(cfg.HashRegions))
+			for _, raw := range cfg.HashRegions {
+				name := normalizeHashRegionName(raw)
+				if name == "" || seen[name] {
+					continue
+				}
+				seen[name] = true
+				names = append(names, name)
+			}
+			if err := adminStore.ReplaceHashRegions(names); err != nil {
+				log.Printf("[hash-regions] migration from config.json failed: %v", err)
+			} else {
+				log.Printf("[hash-regions] migrated %d entries from config.json to admin.db (config.json's \"hashRegions\" key is no longer read — safe to remove)", len(names))
+			}
+		}
+	}
+}
+
 func main() {
 	// pprof profiling — off by default, enable with ENABLE_PPROF=true
 	if os.Getenv("ENABLE_PPROF") == "true" {
@@ -229,6 +273,14 @@ func main() {
 	}
 	defer adminStore.Close()
 	defer dbClose()
+
+	// One-time migration: "regions" and "hashRegions" used to live in
+	// config.json; both are now DB-backed (admin.db's "regions" and
+	// "hash_regions" tables) so the admin panel can CRUD them directly
+	// instead of only editing a file. Only seeds from config.json when the
+	// DB table is still empty, so this is a no-op on every boot after the
+	// first — and never overwrites values already edited via the admin API.
+	migrateConfigJSONRegions(cfg, adminStore)
 
 	// Verify DB has expected tables
 	var tableName string
@@ -432,6 +484,12 @@ func main() {
 	}).Methods("GET")
 	router.HandleFunc("/admin/infrastructure", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "infrastructure.html"))
+	}).Methods("GET")
+	router.HandleFunc("/admin/regions", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "regions.html"))
+	}).Methods("GET")
+	router.HandleFunc("/admin/hash-regions", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "hash-regions.html"))
 	}).Methods("GET")
 	if _, err := os.Stat(absPublic); err == nil {
 		fs := http.FileServer(http.Dir(absPublic))

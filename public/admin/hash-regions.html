@@ -6,7 +6,7 @@
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Admin — CoreScope</title>
+  <title>Hash Regions — CoreScope Admin</title>
   <script>
     (function () {
       try {
@@ -26,10 +26,10 @@
     <div class="nav-left">
       <a href="/admin/" class="nav-brand" aria-label="CoreScope Admin"><span class="admin-brand">Admin Management</span></a>
       <div class="nav-links">
-        <a href="/admin/" class="nav-link active">Admins</a>
+        <a href="/admin/" class="nav-link">Admins</a>
         <a href="/admin/infrastructure" class="nav-link">Infrastructure Nodes</a>
         <a href="/admin/regions" class="nav-link">Regions</a>
-        <a href="/admin/hash-regions" class="nav-link">Hash Regions</a>
+        <a href="/admin/hash-regions" class="nav-link active">Hash Regions</a>
       </div>
     </div>
     <div class="nav-right">
@@ -48,39 +48,39 @@
 
   <main class="admin-page">
     <div class="admin-header">
-      <h1>Admin Accounts</h1>
-      <p>Manage who can sign in to the CoreScope admin panel.</p>
+      <h1>Hash Regions</h1>
+      <p>MeshCore transport-scope names (e.g. <code>#eu</code>) the ingestor hashes with SHA-256 to derive HMAC keys for scope-matching on transport-route packets. Not related to the IATA display names on the <a href="/admin/regions">Regions</a> page.</p>
     </div>
 
     <div class="admin-section">
-      <h2>Accounts</h2>
+      <div class="form-error" id="apply-notice" style="display:block; color:var(--text-muted); background:var(--surface-1); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:13px;">
+        Changes apply automatically — the ingestor re-checks this list roughly every 15 seconds and does not need to be restarted.
+      </div>
+
+      <h2>Configured Hash Regions</h2>
+      <div class="form-error" id="regions-error"></div>
       <table class="data-table">
+        <colgroup><col style="width:75%"><col style="width:25%"></colgroup>
         <thead>
-          <tr><th>Username</th><th>Role</th><th>Created</th></tr>
+          <tr><th>Region Name</th><th></th></tr>
         </thead>
-        <tbody id="admins-table-body"></tbody>
+        <tbody id="regions-list"></tbody>
       </table>
 
-      <button class="btn-secondary" id="show-add-admin" style="display:none; margin-top:16px;">+ Add admin</button>
+      <div class="search-row" id="add-region-row" style="margin-top:16px;">
+        <input type="text" id="new-region-name" placeholder="Region name (e.g. eu or #eu)" maxlength="64">
+        <button class="btn-secondary" id="add-region-btn">+ Add</button>
+      </div>
 
-      <form class="admin-form" id="add-admin-form">
-        <div class="form-error" id="add-admin-error"></div>
-        <label for="new-username">Username</label>
-        <input type="text" id="new-username" required>
-        <label for="new-password">Password</label>
-        <input type="password" id="new-password" required>
-        <label for="new-role">Role</label>
-        <select id="new-role">
-          <option value="admin">admin</option>
-          <option value="super_admin">super_admin</option>
-        </select>
-        <button type="submit" class="btn-primary">Create admin</button>
-      </form>
+      <div style="margin-top:16px; display:flex; align-items:center; gap:12px;">
+        <button class="btn-primary" id="save-regions-btn">Save changes</button>
+        <span id="save-status" class="row-error" style="color:var(--text-muted);"></span>
+      </div>
     </div>
   </main>
 
   <script src="theme-toggle.js"></script>
   <script src="account-menu.js"></script>
-  <script src="admin.js"></script>
+  <script src="hash-regions.js"></script>
 </body>
 </html>
