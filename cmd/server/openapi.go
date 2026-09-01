@@ -40,6 +40,7 @@ func routeDescriptions() map[string]routeMeta {
 		"GET /api/config/client":       {Summary: "Get client configuration", Tag: "config"},
 		"GET /api/config/regions":      {Summary: "Get configured regions", Tag: "config"},
 		"GET /api/config/regions/list": {Summary: "Get region names as a JSON string array", Description: "Flattened, deduplicated, alphabetically sorted list of region display names. Intended for simple integrations (e.g. a Discord bot) that just need to know what regions currently exist.", Tag: "config"},
+		"GET /api/config/hash-regions": {Summary: "Get hashRegions as a JSON string array", Description: "Public, unauthenticated counterpart to GET /api/admin/hash-regions. Returns the configured MeshCore transport-scope names (e.g. \"#eu\") as a plain JSON array, alphabetically sorted.", Tag: "config"},
 		"GET /api/config/theme":        {Summary: "Get theme configuration", Description: "Returns color maps, CSS variables, and theme defaults.", Tag: "config"},
 		"GET /api/config/map":          {Summary: "Get map configuration", Tag: "config"},
 		"GET /api/config/geo-filter":   {Summary: "Get geo-filter configuration", Tag: "config"},

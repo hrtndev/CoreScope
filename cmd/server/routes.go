@@ -233,6 +233,11 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	// integration) — a bot just wants ["San Jose, US", ...], not the
 	// code -> name map the frontend needs for lookups.
 	r.HandleFunc("/api/config/regions/list", s.handleConfigRegionsList).Methods("GET")
+	// Public read of the MeshCore hash-region names (distinct concept from
+	// IATA regions above — see /api/admin/hash-regions' registration
+	// comment). Plain JSON string array, same shape as regions/list, for
+	// integrations that just want to know what's configured.
+	r.HandleFunc("/api/config/hash-regions", s.handleConfigHashRegions).Methods("GET")
 	r.HandleFunc("/api/config/theme", s.handleConfigTheme).Methods("GET")
 	r.HandleFunc("/api/config/map", s.handleConfigMap).Methods("GET")
 	r.HandleFunc("/api/config/geo-filter", s.handleConfigGeoFilter).Methods("GET")
@@ -608,6 +613,28 @@ func (s *Server) handleConfigRegionsList(w http.ResponseWriter, r *http.Request)
 	}
 	sort.Strings(names)
 	writeJSON(w, names)
+}
+
+// handleConfigHashRegions is the public counterpart to
+// /api/admin/hash-regions — read-only, unauthenticated, same JSON string
+// array shape as /api/config/regions/list. A DB read error degrades to an
+// empty array rather than a 500, matching the other public config
+// endpoints' resilience.
+func (s *Server) handleConfigHashRegions(w http.ResponseWriter, r *http.Request) {
+	if s.admin == nil {
+		writeJSON(w, []string{})
+		return
+	}
+	regions, err := s.admin.ListHashRegions()
+	if err != nil {
+		log.Printf("[hash-regions] load failed: %v", err)
+		writeJSON(w, []string{})
+		return
+	}
+	if regions == nil {
+		regions = []string{} // avoid serializing "null" for an empty list
+	}
+	writeJSON(w, regions)
 }
 
 func (s *Server) handleConfigTheme(w http.ResponseWriter, r *http.Request) {
