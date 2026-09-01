@@ -433,6 +433,12 @@ func main() {
 	router.HandleFunc("/admin/infrastructure", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "infrastructure.html"))
 	}).Methods("GET")
+	router.HandleFunc("/admin/regions", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "regions.html"))
+	}).Methods("GET")
+	router.HandleFunc("/admin/hash-regions", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, filepath.Join(absPublic, "admin", "hash-regions.html"))
+	}).Methods("GET")
 	if _, err := os.Stat(absPublic); err == nil {
 		fs := http.FileServer(http.Dir(absPublic))
 		router.PathPrefix("/").Handler(wsOrStatic(hub, spaHandler(absPublic, fs)))

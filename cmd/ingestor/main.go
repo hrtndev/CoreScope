@@ -102,6 +102,15 @@ func main() {
 	}
 
 	regionKeys := loadRegionKeys(cfg)
+	if len(regionKeys) > 0 {
+		log.Printf("[regions] %d region key(s) loaded", len(regionKeys))
+	}
+	// regionKeysPtr holds the live region-key set. handleMessage reads it
+	// fresh on every message (via .Load()) instead of closing over a fixed
+	// map, so reloadRegionKeys can hot-swap it on the ticker below without
+	// requiring a restart (see reloadRegionKeys for why).
+	var regionKeysPtr atomic.Pointer[map[string][]byte]
+	regionKeysPtr.Store(&regionKeys)
 	store.BackfillDefaultScopeAsync(regionKeys)
 
 	// Subscribe-early + buffer (#1608): the MQTT subscription is brought up
@@ -180,7 +189,7 @@ func main() {
 			markReceiptForTag(tag, time.Now())
 			status.MarkPacket(time.Now())
 			ingestBuffer.Submit(func() {
-				handleMessage(store, tag, src, m, channelKeys, regionKeys, cfg)
+				handleMessage(store, tag, src, m, channelKeys, &regionKeysPtr, cfg)
 			})
 		})
 
@@ -416,16 +425,19 @@ func main() {
 	// 15 seconds — short enough for a one-click UX, long enough to avoid
 	// useless wake-ups.
 	//
-	// Infra-flag requests (admin panel's infrastructure toggle) share
-	// this same ticker rather than getting their own goroutine — both
-	// are cheap directory listings on the same cadence.
+	// Infra-flag requests (admin panel's infrastructure toggle) and the
+	// hashRegions hot-reload (admin panel's PUT /api/admin/hash-regions)
+	// share this same ticker rather than getting their own goroutine —
+	// all three are cheap on this cadence.
 	store.RunPendingPruneRequests()
 	store.RunPendingInfraRequests()
+	reloadRegionKeys(*configPath, &regionKeysPtr)
 	pruneQueueTicker := time.NewTicker(15 * time.Second)
 	go func() {
 		for range pruneQueueTicker.C {
 			store.RunPendingPruneRequests()
 			store.RunPendingInfraRequests()
+			reloadRegionKeys(*configPath, &regionKeysPtr)
 		}
 	}()
 
@@ -550,10 +562,20 @@ func buildMQTTOpts(source MQTTSource) *mqtt.ClientOptions {
 	return opts
 }
 
-func handleMessage(store *Store, tag string, source MQTTSource, m mqtt.Message, channelKeys map[string]string, regionKeys map[string][]byte, cfg *Config) {
+func handleMessage(store *Store, tag string, source MQTTSource, m mqtt.Message, channelKeys map[string]string, regionKeysPtr *atomic.Pointer[map[string][]byte], cfg *Config) {
 	// Liveness watchdog (#1212): record receipt before any processing so a
 	// slow handler still counts as "source is alive". Cheap atomic store.
 	markLivenessForTag(tag, time.Now())
+	// Loaded fresh per message (not closed over) so reloadRegionKeys' hot
+	// swap is visible immediately — see its doc comment. A nil/unset
+	// pointer (tests that don't care about region scoping) means no
+	// region keys, same as the old map[string][]byte(nil) default.
+	var regionKeys map[string][]byte
+	if regionKeysPtr != nil {
+		if loaded := regionKeysPtr.Load(); loaded != nil {
+			regionKeys = *loaded
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("MQTT [%s] panic in handler: %v", tag, r)
@@ -1452,10 +1474,44 @@ func loadRegionKeys(cfg *Config) map[string][]byte {
 		h := sha256.Sum256([]byte(name))
 		keys[name] = h[:16]
 	}
-	if len(keys) > 0 {
-		log.Printf("[regions] %d region key(s) loaded", len(keys))
-	}
 	return keys
+}
+
+// regionKeysEqual reports whether a and b cover the same set of region
+// names. Values never need comparing: each is a pure SHA256(name)
+// derivation, so identical name sets always produce identical keys.
+func regionKeysEqual(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name := range a {
+		if _, ok := b[name]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// reloadRegionKeys re-reads hashRegions from config.json and atomically
+// swaps the derived HMAC keys matchScope uses, so PUT /api/admin/hash-regions
+// edits apply without restarting the ingestor. Called on the same 15s ticker
+// as the prune-request queue (see main) — cheap enough to piggyback rather
+// than earning its own goroutine. Logs only when the configured set actually
+// changes, so a steady-state config doesn't spam the log every tick.
+func reloadRegionKeys(configPath string, ptr *atomic.Pointer[map[string][]byte]) {
+	names, err := LoadHashRegionsFromFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("[regions] reload failed: %v", err)
+		}
+		return
+	}
+	newKeys := loadRegionKeys(&Config{HashRegions: names})
+	oldKeys := *ptr.Load()
+	if !regionKeysEqual(oldKeys, newKeys) {
+		log.Printf("[regions] hash regions changed: %d -> %d region key(s)", len(oldKeys), len(newKeys))
+	}
+	ptr.Store(&newKeys)
 }
 
 // matchScope performs one HMAC-SHA256 per configured region. Expected

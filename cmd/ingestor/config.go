@@ -337,6 +337,25 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// LoadHashRegionsFromFile reads just the "hashRegions" field from a
+// config.json path — no env var overrides, no MQTT source defaulting, none
+// of LoadConfig's other side effects. Used by reloadRegionKeys (main.go) to
+// cheaply re-check hashRegions on a ticker so admin-portal edits (PUT
+// /api/admin/hash-regions) take effect without restarting the ingestor.
+func LoadHashRegionsFromFile(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		HashRegions []string `json:"hashRegions"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	return raw.HashRegions, nil
+}
+
 // ResolvedSources returns the final list of MQTT sources to connect to.
 //
 // Scheme mapping:

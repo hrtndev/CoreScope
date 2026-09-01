@@ -200,6 +200,24 @@ func (s *Server) setGeoFilter(gf *GeoFilterConfig) {
 	s.cfg.GeoFilter = gf
 }
 
+// getRegions returns a copy of the configured code -> display name map.
+func (s *Server) getRegions() map[string]string {
+	s.cfgMu.RLock()
+	defer s.cfgMu.RUnlock()
+	out := make(map[string]string, len(s.cfg.Regions))
+	for k, v := range s.cfg.Regions {
+		out[k] = v
+	}
+	return out
+}
+
+// setRegions atomically swaps the regions config; used by PUT /api/admin/regions.
+func (s *Server) setRegions(regions map[string]string) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	s.cfg.Regions = regions
+}
+
 // RegisterRoutes sets up all HTTP routes on the given router.
 func (s *Server) RegisterRoutes(r *mux.Router) {
 	s.router = r
@@ -229,6 +247,10 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/config/cache", s.handleConfigCache).Methods("GET")
 	r.HandleFunc("/api/config/client", s.handleConfigClient).Methods("GET")
 	r.HandleFunc("/api/config/regions", s.handleConfigRegions).Methods("GET")
+	// Plain string-array shape of the same region names (issue: Discord bot
+	// integration) — a bot just wants ["San Jose, US", ...], not the
+	// code -> name map the frontend needs for lookups.
+	r.HandleFunc("/api/config/regions/list", s.handleConfigRegionsList).Methods("GET")
 	r.HandleFunc("/api/config/theme", s.handleConfigTheme).Methods("GET")
 	r.HandleFunc("/api/config/map", s.handleConfigMap).Methods("GET")
 	r.HandleFunc("/api/config/geo-filter", s.handleConfigGeoFilter).Methods("GET")
@@ -279,6 +301,25 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	// above, not requireAPIKey. See admin_infra.go.
 	r.Handle("/api/admin/nodes/infrastructure", s.requireAdmin(s.requireCSRF(http.HandlerFunc(s.handleSetInfrastructureFlag)))).Methods("POST")
 	r.Handle("/api/admin/nodes/infrastructure/status", s.requireAdmin(http.HandlerFunc(s.handleInfrastructureFlagStatus))).Methods("GET")
+
+	// Region name management: config.json's "regions" map is a plain file
+	// the server process already owns (unlike the packet DB, which the
+	// server opens read-only), so this writes directly — no ingestor
+	// queue/status-poll dance needed, unlike infrastructure flags above.
+	r.Handle("/api/admin/regions", s.requireAdmin(http.HandlerFunc(s.handleAdminGetRegions))).Methods("GET")
+	r.Handle("/api/admin/regions", s.requireAdmin(s.requireCSRF(http.HandlerFunc(s.handleAdminPutRegions)))).Methods("PUT")
+
+	// Hash-region management: the MeshCore transport-scope names (e.g.
+	// "#eu") the ingestor hashes via SHA256 to derive HMAC keys for
+	// scope-matching (see loadRegionKeys/matchScope in cmd/ingestor/main.go).
+	// Distinct from /api/admin/regions above (IATA observer display names) —
+	// same word, unrelated concept. cmd/server only reads/writes this list
+	// on config.json; it never consumes it itself, so there's no in-memory
+	// state to keep in sync. The ingestor re-checks config.json on its
+	// existing 15s prune-queue ticker (reloadRegionKeys), so edits apply
+	// without restarting it.
+	r.Handle("/api/admin/hash-regions", s.requireAdmin(http.HandlerFunc(s.handleAdminGetHashRegions))).Methods("GET")
+	r.Handle("/api/admin/hash-regions", s.requireAdmin(s.requireCSRF(http.HandlerFunc(s.handleAdminPutHashRegions)))).Methods("PUT")
 
 	// Packet endpoints
 	r.HandleFunc("/api/packets/observations", s.handleBatchObservations).Methods("POST")
@@ -533,10 +574,7 @@ func (s *Server) handleConfigAreasPolygons(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleConfigRegions(w http.ResponseWriter, r *http.Request) {
-	regions := make(map[string]string)
-	for k, v := range s.cfg.Regions {
-		regions[k] = v
-	}
+	regions := s.getRegions()
 	codes, _ := s.db.GetDistinctIATAs()
 	for _, c := range codes {
 		if _, ok := regions[c]; !ok {
@@ -544,6 +582,31 @@ func (s *Server) handleConfigRegions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, regions)
+}
+
+// handleConfigRegionsList returns the same region names as
+// handleConfigRegions, flattened to a sorted JSON string array of unique
+// display names. Public/unauthenticated, intended for simple integrations
+// (e.g. a Discord bot) that just want to know what regions currently exist.
+func (s *Server) handleConfigRegionsList(w http.ResponseWriter, r *http.Request) {
+	regions := s.getRegions()
+	codes, _ := s.db.GetDistinctIATAs()
+	for _, c := range codes {
+		if _, ok := regions[c]; !ok {
+			regions[c] = c
+		}
+	}
+	seen := make(map[string]bool, len(regions))
+	names := make([]string, 0, len(regions))
+	for _, v := range regions {
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		names = append(names, v)
+	}
+	sort.Strings(names)
+	writeJSON(w, names)
 }
 
 func (s *Server) handleConfigTheme(w http.ResponseWriter, r *http.Request) {
@@ -3810,4 +3873,154 @@ func (s *Server) handlePutConfigGeoFilter(w http.ResponseWriter, r *http.Request
 	} else {
 		writeJSON(w, map[string]interface{}{"polygon": nil, "bufferKm": 0})
 	}
+}
+
+const (
+	maxRegionEntries = 500
+	maxRegionCodeLen = 32
+	maxRegionNameLen = 100
+)
+
+// handleAdminGetRegions returns the operator-configured code -> display name
+// map alongside the full set of IATA codes observed in the DB, so the admin
+// UI can surface codes that have been seen on the network but don't have a
+// friendly name configured yet.
+func (s *Server) handleAdminGetRegions(w http.ResponseWriter, r *http.Request) {
+	codes, err := s.db.GetDistinctIATAs()
+	if err != nil {
+		codes = nil
+	}
+	sort.Strings(codes)
+	writeJSON(w, map[string]interface{}{
+		"regions":       s.getRegions(),
+		"observedCodes": codes,
+	})
+}
+
+// handleAdminPutRegions replaces the full regions map and writes it back to
+// config.json. Full-replace semantics (like PUT /api/config/geo-filter) —
+// the admin UI sends its complete edited map, not a diff.
+func (s *Server) handleAdminPutRegions(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB cap
+
+	var body struct {
+		Regions map[string]string `json:"regions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if len(body.Regions) > maxRegionEntries {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("too many regions (max %d)", maxRegionEntries))
+		return
+	}
+
+	cleaned := make(map[string]string, len(body.Regions))
+	for code, name := range body.Regions {
+		code = strings.TrimSpace(code)
+		name = strings.TrimSpace(name)
+		if code == "" || name == "" {
+			writeError(w, http.StatusBadRequest, "region code and name must not be empty")
+			return
+		}
+		if len(code) > maxRegionCodeLen {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("region code %q exceeds %d characters", code, maxRegionCodeLen))
+			return
+		}
+		if len(name) > maxRegionNameLen {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("region name for %q exceeds %d characters", code, maxRegionNameLen))
+			return
+		}
+		cleaned[code] = name
+	}
+
+	s.saveMu.Lock()
+	if s.configDir != "" {
+		if err := SaveRegions(s.configDir, cleaned); err != nil {
+			s.saveMu.Unlock()
+			log.Printf("[regions] save failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to save config")
+			return
+		}
+	}
+	s.setRegions(cleaned)
+	s.saveMu.Unlock()
+
+	writeJSON(w, map[string]interface{}{"regions": cleaned})
+}
+
+const (
+	maxHashRegionEntries = 100
+	maxHashRegionNameLen = 64
+)
+
+// handleAdminGetHashRegions returns the current hashRegions list, read
+// fresh from config.json (see LoadHashRegions for why there's no
+// in-memory copy to serve from instead).
+func (s *Server) handleAdminGetHashRegions(w http.ResponseWriter, r *http.Request) {
+	regions, err := LoadHashRegions(s.configDir)
+	if err != nil {
+		log.Printf("[hash-regions] load failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to read config")
+		return
+	}
+	writeJSON(w, map[string]interface{}{"hashRegions": regions})
+}
+
+// handleAdminPutHashRegions replaces the full hashRegions list and writes
+// it back to config.json. Full-replace semantics, like PUT
+// /api/admin/regions — the admin UI sends its complete edited list.
+// Normalizes each entry the same way loadRegionKeys does at ingestor
+// startup (trim, add leading "#") so what's stored matches what the
+// ingestor will actually derive keys from.
+func (s *Server) handleAdminPutHashRegions(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB cap
+
+	var body struct {
+		HashRegions []string `json:"hashRegions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if len(body.HashRegions) > maxHashRegionEntries {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("too many hash regions (max %d)", maxHashRegionEntries))
+		return
+	}
+
+	seen := make(map[string]bool, len(body.HashRegions))
+	cleaned := make([]string, 0, len(body.HashRegions))
+	for _, raw := range body.HashRegions {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if !strings.HasPrefix(name, "#") {
+			name = "#" + name
+		}
+		if len(name) > maxHashRegionNameLen {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("hash region name %q exceeds %d characters", name, maxHashRegionNameLen))
+			return
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		cleaned = append(cleaned, name)
+	}
+
+	if s.configDir == "" {
+		writeError(w, http.StatusInternalServerError, "server has no configDir set")
+		return
+	}
+	s.saveMu.Lock()
+	err := SaveHashRegions(s.configDir, cleaned)
+	s.saveMu.Unlock()
+	if err != nil {
+		log.Printf("[hash-regions] save failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to save config")
+		return
+	}
+
+	writeJSON(w, map[string]interface{}{"hashRegions": cleaned})
 }

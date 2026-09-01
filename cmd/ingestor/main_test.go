@@ -10,11 +10,21 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
+
+// regionKeysPtr wraps a region-key map the way handleMessage now expects
+// it (see reloadRegionKeys in main.go) — tests that care about specific
+// region keys build the map, then pass this pointer.
+func regionKeysPtr(m map[string][]byte) *atomic.Pointer[map[string][]byte] {
+	var ptr atomic.Pointer[map[string][]byte]
+	ptr.Store(&m)
+	return &ptr
+}
 
 func TestToFloat64(t *testing.T) {
 	tests := []struct {
@@ -109,9 +119,9 @@ type mockMessage struct {
 	payload []byte
 }
 
-func (m *mockMessage) Duplicate() bool  { return false }
-func (m *mockMessage) Qos() byte        { return 0 }
-func (m *mockMessage) Retained() bool   { return false }
+func (m *mockMessage) Duplicate() bool   { return false }
+func (m *mockMessage) Qos() byte         { return 0 }
+func (m *mockMessage) Retained() bool    { return false }
 func (m *mockMessage) Topic() string     { return m.topic }
 func (m *mockMessage) MessageID() uint16 { return 0 }
 func (m *mockMessage) Payload() []byte   { return m.payload }
@@ -598,10 +608,10 @@ func TestLoadChannelKeysHashChannelsNormalization(t *testing.T) {
 
 	cfg := &Config{
 		HashChannels: []string{
-			"NoPound",       // should become #NoPound
-			"#HasPound",     // stays #HasPound
-			"  Spaced  ",   // trimmed → #Spaced
-			"",              // skipped
+			"NoPound",    // should become #NoPound
+			"#HasPound",  // stays #HasPound
+			"  Spaced  ", // trimmed → #Spaced
+			"",           // skipped
 		},
 	}
 
@@ -1123,7 +1133,7 @@ func TestHandleMessageAdvert_EmptyScopeSkipsDefaultScopeUpdate(t *testing.T) {
 		topic:   "meshcore/SJC/obs1/packets",
 		payload: []byte(`{"raw":"` + rawHex + `"}`),
 	}
-	handleMessage(store, "test", source, msg, nil, map[string][]byte{}, &Config{})
+	handleMessage(store, "test", source, msg, nil, regionKeysPtr(map[string][]byte{}), &Config{})
 
 	var got sql.NullString
 	if err := store.db.QueryRow(`SELECT default_scope FROM nodes WHERE public_key = ?`, pubkey).Scan(&got); err != nil {
@@ -1175,7 +1185,7 @@ func TestHandleMessageAdvert_MatchedScopeUpdatesDefaultScope(t *testing.T) {
 		topic:   "meshcore/SJC/obs1/packets",
 		payload: []byte(`{"raw":"` + rawHex + `"}`),
 	}
-	handleMessage(store, "test", source, msg, nil, map[string][]byte{"#de": regionKey}, &Config{})
+	handleMessage(store, "test", source, msg, nil, regionKeysPtr(map[string][]byte{"#de": regionKey}), &Config{})
 
 	var got sql.NullString
 	if err := store.db.QueryRow(`SELECT default_scope FROM nodes WHERE public_key = ?`, pubkey).Scan(&got); err != nil {
