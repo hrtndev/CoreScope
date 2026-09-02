@@ -18,6 +18,7 @@
   function statusGreen() { return cssVar('--status-green') || '#22c55e'; }
 
   let map, ws, nodesLayer, pathsLayer, animLayer, heatLayer, geoFilterLayer, clickablePathsLayer;
+  let scopeCoverageOverlay = null; // see scope-coverage.js — createScopeCoverageOverlay(map, opts)
   // New animation canvas
   let animCanvas, animCtx;
   let _dprMedia = null;
@@ -1152,6 +1153,7 @@
             <label><input type="checkbox" id="liveMultibyteToggle" aria-describedby="multibyteDesc"> Multibyte only</label>
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
+            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Hash region coverage <span class="badge badge-new">Beta</span></label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1855,6 +1857,13 @@
         }
       } catch (e) { /* no geo filter configured */ }
     })();
+
+    // Hash-region coverage overlay — see scope-coverage.js
+    scopeCoverageOverlay = createScopeCoverageOverlay(map, {
+      checkboxId: 'liveScopeCoverageToggle', labelId: 'liveScopeCoverageLabel',
+      storageKey: 'meshcore-live-scope-coverage'
+    });
+    scopeCoverageOverlay.load();
 
     const matrixToggle = document.getElementById('liveMatrixToggle');
     matrixToggle.checked = matrixMode;
@@ -4521,6 +4530,7 @@
       RegionFilter.offChange(regionFilterChangeHandler);
       regionFilterChangeHandler = null;
     }
+    if (scopeCoverageOverlay) { scopeCoverageOverlay.destroy(); scopeCoverageOverlay = null; }
     if (map) { map.remove(); map = null; }
     if (_onResize) {
       window.removeEventListener('resize', _onResize);
@@ -4584,6 +4594,7 @@
       _themeRefreshHandler = () => {
         rebuildFeedList();
         if (activeNodeDetailKey) showNodeDetail(activeNodeDetailKey);
+        if (scopeCoverageOverlay) scopeCoverageOverlay.refreshTheme();
       };
       window.addEventListener('theme-refresh', _themeRefreshHandler);
       var result = init(app, routeParam);
