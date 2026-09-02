@@ -227,7 +227,7 @@
             <label for="mcHashLabels"><input type="checkbox" id="mcHashLabels"> Hash prefix labels</label>
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
-            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage</label>
+            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage <span class="badge badge-new">New</span></label>
           </fieldset>
           <div id="mapAreaFilter"></div>
           <fieldset class="mc-section">
