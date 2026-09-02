@@ -775,17 +775,15 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   color: var(--accent) !important;
 }
 
-/* Hash Region Coverage toggle — a standalone labeled pill positioned
- * just below the MESH LIVE panel (#liveHeader), not another checkbox
- * buried in the settings accordion, so a beta feature is actually
- * noticeable. --live-header-height is published by
- * initLiveHeaderHeightTracker (live.js) via ResizeObserver on
- * #liveHeader, so this tracks the panel's real height — title row only,
- * or title+stats+expanded-settings-toggles — instead of a fixed offset
- * that would either overlap it or leave a growing gap. */
+/* Hash Region Coverage toggle — a standalone labeled pill, not another
+ * checkbox buried in the settings accordion, so a beta feature is
+ * actually noticeable. Pinned bottom-right above the VCR timeline,
+ * tracking --vcr-bar-height (published by initVCRHeightTracker,
+ * live.js) the same way .live-legend does. Sits to the legend's left
+ * (legend max-width is 260px) rather than overlapping it. */
 .live-scope-coverage-control {
-  top: calc(64px + var(--live-header-height, 27px) + 8px);
-  left: 12px;
+  bottom: calc(var(--vcr-bar-height, 58px) + 10px);
+  right: 284px;
   flex-direction: row;
 }
 .live-scope-coverage-control a {
@@ -793,9 +791,9 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   align-items: center;
   gap: 6px;
   height: 32px;
-  line-height: 32px;
-  padding: 0 12px;
+  padding: 0 4px 0 12px;
   border-radius: 16px;
+  overflow: hidden;
   background: var(--surface-1);
   color: var(--text);
   border: 1.5px solid var(--accent-strong);
@@ -805,7 +803,6 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
 }
-.live-scope-coverage-control a .ph-icon { width: 15px; height: 15px; flex-shrink: 0; }
 .live-scope-coverage-control a:hover {
   background: var(--accent-bg, color-mix(in srgb, var(--accent-strong) 15%, transparent));
 }
@@ -816,11 +813,6 @@ body.live-fullscreen #liveFullscreenToggle:hover,
 .live-scope-coverage-control a.active .badge-new {
   background: #fff;
   color: var(--accent-strong);
-}
-@media (max-width: 640px) {
-  /* Icon + Beta badge only — "Hash Regions" text would push this control
-   * wider than the map controls are willing to spare on phones. */
-  .live-scope-coverage-control a span:not(.badge-new) { display: none; }
 }
 
 

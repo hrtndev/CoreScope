@@ -407,40 +407,6 @@
     };
   }
 
-  // Publishes #liveHeader's measured height as --live-header-height on
-  // .live-page, so the standalone Hash Region Coverage button (CSS:
-  // .live-scope-coverage-control) can position itself just below the
-  // MESH LIVE panel no matter how tall that panel currently is — title
-  // row only, or title+stats+expanded-settings-toggles. Same pattern as
-  // initVCRHeightTracker above, for the same reason (a fixed pixel
-  // offset would either overlap the panel or leave a growing gap).
-  var _liveHeaderHeightCleanup = null;
-  function initLiveHeaderHeightTracker() {
-    if (_liveHeaderHeightCleanup) { try { _liveHeaderHeightCleanup(); } catch (_) {} _liveHeaderHeightCleanup = null; }
-    var header = document.getElementById('liveHeader');
-    var page = document.querySelector('.live-page');
-    if (!header || !page) return;
-    function publish() {
-      var h = Math.ceil(header.getBoundingClientRect().height) || 27;
-      page.style.setProperty('--live-header-height', h + 'px');
-    }
-    publish();
-    var ro = null;
-    if (typeof ResizeObserver === 'function') {
-      try { ro = new ResizeObserver(publish); ro.observe(header); } catch (_) { ro = null; }
-    }
-    window.addEventListener('resize', publish);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', publish);
-    }
-    _liveHeaderHeightCleanup = function() {
-      if (ro) { try { ro.disconnect(); } catch (_) {} ro = null; }
-      window.removeEventListener('resize', publish);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', publish);
-      }
-    };
-  }
   function vcrSetMode(mode) {
     VCR.mode = mode;
     if (mode !== 'LIVE' && !VCR.frozenNow) VCR.frozenNow = Date.now();
@@ -1212,7 +1178,6 @@
           <input type="checkbox" id="liveScopeCoverageToggle" style="display:none">
           <a href="javascript:void(0)" id="liveScopeCoverageBtn" role="button" aria-pressed="false"
              title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary">
-            <svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-map-trifold"/></svg>
             <span>Hash Regions</span><span class="badge badge-new">Beta</span>
           </a>
         </div>
@@ -1548,16 +1513,13 @@
 
     // Standalone Hash Region Coverage toggle — deliberately its own
     // labeled button (not another checkbox buried in the settings
-    // accordion) so people notice a beta feature exists at all. Lives
-    // just below the MESH LIVE panel (#liveHeader) — NOT a Leaflet corner
-    // control, because it needs to track that panel's height (title row
-    // only vs. title+stats+expanded-toggles) to always sit right under
-    // it rather than overlapping. initLiveHeaderHeightTracker (defined
-    // next to initVCRHeightTracker above) handles that via
-    // ResizeObserver. Hidden until scope-coverage.js's load()
-    // confirms the server actually has region data — see the markup's
-    // #liveScopeCoverageLabel, same "don't show a dead feature" behavior
-    // the map.js sidebar checkbox has.
+    // accordion) so people notice a beta feature exists at all. Pinned
+    // bottom-right, tracking --vcr-bar-height (published by
+    // initVCRHeightTracker) the same way .live-legend does, so it never
+    // sits on top of the VCR bar. Hidden until scope-coverage.js's
+    // load() confirms the server actually has region data — see the
+    // markup's #liveScopeCoverageLabel, same "don't show a dead feature"
+    // behavior the map.js sidebar checkbox has.
     const scopeCoverageBtn = document.getElementById('liveScopeCoverageBtn');
     const scopeCoverageCb = document.getElementById('liveScopeCoverageToggle');
     if (scopeCoverageBtn && scopeCoverageCb) {
@@ -1571,7 +1533,6 @@
         scopeCoverageBtn.setAttribute('aria-pressed', scopeCoverageCb.checked ? 'true' : 'false');
       });
     }
-    initLiveHeaderHeightTracker();
 
     // Swap tiles when theme changes
     const _themeObs = new MutationObserver(function () {
@@ -4604,7 +4565,6 @@
       if (window.visualViewport) window.visualViewport.removeEventListener('resize', _onResize);
     }
     if (_vcrHeightCleanup) { try { _vcrHeightCleanup(); } catch (_) {} _vcrHeightCleanup = null; }
-    if (_liveHeaderHeightCleanup) { try { _liveHeaderHeightCleanup(); } catch (_) {} _liveHeaderHeightCleanup = null; }
     // Restore #app height to CSS default
     const appEl = document.getElementById('app');
     if (appEl) appEl.style.height = '';
