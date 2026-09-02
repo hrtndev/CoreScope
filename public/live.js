@@ -1153,6 +1153,7 @@
             <label><input type="checkbox" id="liveMultibyteToggle" aria-describedby="multibyteDesc"> Multibyte only</label>
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
+            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Hash region coverage <span class="badge badge-new">Beta</span></label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1174,13 +1175,6 @@
           </div>
         </div>
         </div><!-- /#liveHeader -->
-        <div class="live-overlay live-scope-coverage-control" id="liveScopeCoverageLabel" style="display:none">
-          <input type="checkbox" id="liveScopeCoverageToggle" style="display:none">
-          <a href="javascript:void(0)" id="liveScopeCoverageBtn" role="button" aria-pressed="false"
-             title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary">
-            <span>Hash Regions</span><span class="badge badge-new">Beta</span>
-          </a>
-        </div>
         <div class="live-overlay live-feed" id="liveFeed">
           <div class="panel-header">
             <button class="panel-corner-btn" data-panel="liveFeed" title="Move panel to next corner" aria-label="Move panel to next corner">◫</button>
@@ -1510,29 +1504,6 @@
       }
     });
     map.addControl(new LiveSettingsControl());
-
-    // Standalone Hash Region Coverage toggle — deliberately its own
-    // labeled button (not another checkbox buried in the settings
-    // accordion) so people notice a beta feature exists at all. Pinned
-    // bottom-right, tracking --vcr-bar-height (published by
-    // initVCRHeightTracker) the same way .live-legend does, so it never
-    // sits on top of the VCR bar. Hidden until scope-coverage.js's
-    // load() confirms the server actually has region data — see the
-    // markup's #liveScopeCoverageLabel, same "don't show a dead feature"
-    // behavior the map.js sidebar checkbox has.
-    const scopeCoverageBtn = document.getElementById('liveScopeCoverageBtn');
-    const scopeCoverageCb = document.getElementById('liveScopeCoverageToggle');
-    if (scopeCoverageBtn && scopeCoverageCb) {
-      scopeCoverageCb.checked = localStorage.getItem('meshcore-live-scope-coverage') === 'true';
-      scopeCoverageBtn.classList.toggle('active', scopeCoverageCb.checked);
-      scopeCoverageBtn.setAttribute('aria-pressed', scopeCoverageCb.checked ? 'true' : 'false');
-      scopeCoverageBtn.addEventListener('click', function () {
-        scopeCoverageCb.checked = !scopeCoverageCb.checked;
-        scopeCoverageCb.dispatchEvent(new Event('change'));
-        scopeCoverageBtn.classList.toggle('active', scopeCoverageCb.checked);
-        scopeCoverageBtn.setAttribute('aria-pressed', scopeCoverageCb.checked ? 'true' : 'false');
-      });
-    }
 
     // Swap tiles when theme changes
     const _themeObs = new MutationObserver(function () {

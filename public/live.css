@@ -775,49 +775,6 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   color: var(--accent) !important;
 }
 
-/* Hash Region Coverage toggle — a standalone labeled pill, not another
- * checkbox buried in the settings accordion, so a beta feature is
- * actually noticeable. Pinned bottom-right above the VCR timeline,
- * tracking --vcr-bar-height (published by initVCRHeightTracker,
- * live.js) the same way .live-legend does. Sits to the legend's left
- * (legend max-width is 260px) rather than overlapping it. */
-.live-scope-coverage-control {
-  bottom: calc(var(--vcr-bar-height, 58px) + 10px);
-  right: 284px;
-  flex-direction: row;
-}
-.live-scope-coverage-control a {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--surface-1);
-  color: var(--text);
-  border: 1.5px solid var(--accent-strong);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
-}
-.live-scope-coverage-control a:hover {
-  background: var(--accent-bg, color-mix(in srgb, var(--accent-strong) 15%, transparent));
-}
-.live-scope-coverage-control a.active {
-  background: var(--accent-strong);
-  color: #fff;
-}
-.live-scope-coverage-control a.active .badge-new {
-  background: #fff;
-  color: var(--accent-strong);
-}
-
-
-
-
 /* Feed item hover */
 .live-feed-item:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
 
