@@ -1,16 +1,16 @@
 # Area Filter
 
-The area filter is a **GPS-based display filter** that scopes the dashboard to nodes within a defined geographic area. It is distinct from the [region filter](configuration.md#regions), which groups data by the observer's IATA location code.
+The area filter is a **GPS-based display filter** that scopes the dashboard to nodes within a defined geographic area. It is distinct from the [IATA region filter](configuration.md#iata-regions), which groups data by the observer's IATA location code.
 
-## How it differs from the region filter
+## How it differs from the IATA region filter
 
-| | Region filter | Area filter |
+| | IATA region filter | Area filter |
 |--|--|--|
 | Based on | Observer's IATA code (from MQTT topic) | Transmitting node's own GPS coordinates |
 | Set by | MQTT topic structure | Node's advertised GPS position |
 | Use case | Separate traffic by observer location | Separate traffic by where nodes physically are |
 
-Because the region filter is observer-based, a node broadcasting in San Jose can appear under "San Francisco" if a San Francisco observer hears it first. The area filter avoids this cross-region pollution by attributing packets to areas based on where the **sending node** is located.
+Because the IATA region filter is observer-based, a node broadcasting in San Jose can appear under "San Francisco" if a San Francisco observer hears it first. The area filter avoids this cross-region pollution by attributing packets to areas based on where the **sending node** is located.
 
 ## Configuration
 

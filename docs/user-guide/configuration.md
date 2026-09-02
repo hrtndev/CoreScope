@@ -134,15 +134,15 @@ See [Channels](channels.md) for details.
 
 Initial map center and zoom level.
 
-## Regions
+## IATA Regions
 
-Named regions for the region filter dropdown (e.g. `SJC` → `San Jose, US`) are no longer configured in `config.json` — manage them at **`/admin/regions`** in the admin panel instead. They're stored in `admin.db`'s `regions` table and take effect immediately (no restart). Any codes you leave unnamed still show up in the filter, just labelled with the bare IATA code.
+Named IATA regions for the IATA region filter dropdown (e.g. `SJC` → `San Jose, US`) are no longer configured in `config.json` — manage them at **`/admin/regions`** in the admin panel instead. They're stored in `admin.db`'s `regions` table and take effect immediately (no restart). Any codes you leave unnamed still show up in the filter, just labelled with the bare IATA code.
 
 If you're upgrading from a version that had a `"regions"` key in `config.json`, it's copied into `admin.db` automatically the first time the server starts after upgrading (only if the table is still empty) — you can remove the key from `config.json` afterward, it's no longer read.
 
-## Hash Regions
+## Regions
 
-MeshCore transport-scope names (e.g. `#eu`) that the ingestor hashes into HMAC keys for scope-matching on transport-route packets are also no longer configured in `config.json` — manage them at **`/admin/hash-regions`** in the admin panel instead. They're stored in `admin.db`'s `hash_regions` table; the ingestor polls for changes roughly every 15 seconds, so edits apply without a restart. Same one-time config.json migration behavior as Regions above applies to the old `hashRegions` key.
+MeshCore transport-scope names (e.g. `#eu`) that the ingestor hashes into HMAC keys for scope-matching on transport-route packets are also no longer configured in `config.json` — manage them at **`/admin/hash-regions`** in the admin panel instead. They're stored in `admin.db`'s `hash_regions` table; the ingestor polls for changes roughly every 15 seconds, so edits apply without a restart. Same one-time config.json migration behavior as IATA Regions above applies to the old `hashRegions` key.
 
 ## Cache TTL
 
