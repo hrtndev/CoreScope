@@ -225,7 +225,7 @@
             <label for="mcHashLabels"><input type="checkbox" id="mcHashLabels"> Hash prefix labels</label>
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
-            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of node positions per matched MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage</label>
+            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage</label>
             <div id="mcScopeCoverageLegend" style="display:none;margin-top:4px;padding-left:20px;"></div>
           </fieldset>
           <div id="mapAreaFilter"></div>
@@ -2048,9 +2048,10 @@
 
   // ─── Hash Region Coverage Overlay ──────────────────────────────────────────
   // Renders /api/scope-coverage's per-region convex hulls as colored map
-  // shapes — an inferred coverage area (from where matched nodes actually
-  // are), not an authoritative boundary; hash regions carry no shape of
-  // their own. See cmd/server/scope_coverage.go.
+  // shapes — the positions of repeaters/rooms that have actually RELAYED
+  // traffic for that region (not just self-declared it), so an inferred
+  // coverage area, not an authoritative boundary; hash regions carry no
+  // shape of their own. See cmd/server/scope_coverage.go.
 
   // Deterministic string -> 8-hex-char digest (FNV-1a 32-bit) so region
   // names (arbitrary strings like "#eu", not hex hashes) can feed

@@ -128,9 +128,12 @@ type ScopeStatsResponse struct {
 type ScopeCoveragePoint [2]float64
 
 // ScopeCoverageRegion is one hash region's inferred coverage area — the
-// convex hull of every member node's position. Hash regions carry no
-// authoritative shape of their own (internal/admindb's hash_regions table
-// is just names), so this is an approximation, not a boundary.
+// convex hull of every repeater/room's position that has actually
+// RELAYED traffic carrying this scope (RepeaterRelayInfo.TransportedScopes,
+// not nodes.default_scope — see handleScopeCoverage's doc comment for why
+// that distinction matters). Hash regions carry no authoritative shape of
+// their own (internal/admindb's hash_regions table is just names), so
+// this is an approximation, not a boundary.
 type ScopeCoverageRegion struct {
 	Name string `json:"name"`
 	// NodeCount is every contributing node, not just hull vertices.

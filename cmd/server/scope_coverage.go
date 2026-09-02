@@ -11,15 +11,29 @@ import (
 // /api/scope-stats' cache TTL) is more than fresh enough.
 const scopeCoverageTTL = 30 * time.Second
 
-// handleScopeCoverage groups nodes by their matched hash region
-// (nodes.default_scope) and returns the convex hull of each region's
-// member node positions — an area-like approximation of "what geography
-// does this hash region cover," inferred purely from where matched nodes
-// actually are. Hash regions carry no authoritative shape of their own
+// handleScopeCoverage groups repeaters/rooms by the hash regions they've
+// actually carried traffic FOR — RepeaterRelayInfo.TransportedScopes, the
+// deduplicated set of transmissions.scope_name values seen on non-ADVERT
+// packets where the node appeared as a path hop (see repeater_liveness.go
+// / repeater_enrich_bulk.go, #1751) — and returns the convex hull of each
+// region's member node positions. An area-like approximation of "what
+// geography does this hash region's traffic reach," inferred purely from
+// where relaying nodes actually are.
+//
+// Deliberately NOT nodes.default_scope: that field only reflects a node's
+// own self-broadcast ADVERT scope (see shouldUpdateDefaultScope in
+// cmd/ingestor/main.go — it's gated to the ADVERT branch of ingest), i.e.
+// "what scope does this node claim to be in," not "whose traffic has it
+// actually carried." A repeater sitting on a region boundary can — and
+// should — contribute to more than one region's shape; TransportedScopes
+// is a set for exactly this reason, default_scope is a single string.
+//
+// Hash regions carry no authoritative shape of their own
 // (internal/admindb's hash_regions table is just names hashed into HMAC
 // keys), so this can only ever be an inferred coverage area, not a
 // boundary. Public/unauthenticated: the same underlying data (node
-// lat/lon + default_scope) is already served unfiltered by /api/nodes.
+// lat/lon + transported_scopes) is already served unfiltered by
+// /api/nodes for repeaters/rooms.
 func (s *Server) handleScopeCoverage(w http.ResponseWriter, r *http.Request) {
 	s.scopeCoverageMu.Lock()
 	if s.scopeCoverageCache != nil && time.Since(s.scopeCoverageCachedAt) < scopeCoverageTTL {
@@ -30,18 +44,36 @@ func (s *Server) handleScopeCoverage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.scopeCoverageMu.Unlock()
 
-	nodes, err := s.db.GetNodesWithScope()
+	// TransportedScopes lives only in the in-memory packet store (it's
+	// derived from byPathHop, never persisted as its own column) — no
+	// store wired means no relay evidence to report, same as
+	// enrichNodeList's no-op guard.
+	if s.store == nil {
+		resp := &ScopeCoverageResponse{Regions: []ScopeCoverageRegion{}}
+		writeJSON(w, resp)
+		return
+	}
+
+	nodes, err := s.db.GetNodesWithPosition()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	relayMap := s.store.GetRepeaterRelayInfoMap(s.cfg.GetHealthThresholds().RelayActiveHours)
 
 	byRegion := make(map[string][][2]float64)
 	for _, n := range nodes {
 		if s.cfg.IsBlacklisted(n.PubKey) || s.cfg.IsNameHidden(n.Name) {
 			continue
 		}
-		byRegion[n.Scope] = append(byRegion[n.Scope], [2]float64{n.Lat, n.Lon})
+		info, ok := lookupRelayInfo(relayMap, n.PubKey)
+		if !ok {
+			continue
+		}
+		pt := [2]float64{n.Lat, n.Lon}
+		for _, scope := range info.TransportedScopes {
+			byRegion[scope] = append(byRegion[scope], pt)
+		}
 	}
 
 	resp := &ScopeCoverageResponse{Regions: []ScopeCoverageRegion{}}

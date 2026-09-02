@@ -2913,46 +2913,43 @@ func (db *DB) GetScopeStats(window string) (*ScopeStatsResponse, error) {
 	return resp, nil
 }
 
-// ScopeCoverageNode is a candidate row for hash-region coverage: a node
-// with a matched scope and a GPS fix. Includes identity fields (PubKey,
-// Name) so the caller — which has access to *Config, unlike *DB — can
-// apply blacklist/hidden-name filtering before computing hulls.
-type ScopeCoverageNode struct {
+// NodeWithPosition is a candidate row for hash-region coverage: a node
+// with a GPS fix. Includes identity fields (PubKey, Name) so the caller
+// — which has access to *Config, unlike *DB — can apply blacklist/
+// hidden-name filtering, and looks up region membership separately via
+// the in-memory store's TransportedScopes (see scope_coverage.go; region
+// membership isn't a DB column, it's derived from byPathHop).
+type NodeWithPosition struct {
 	PubKey string
 	Name   string
-	Scope  string
 	Lat    float64
 	Lon    float64
 }
 
-// GetNodesWithScope returns every active node with both a non-empty
-// default_scope and a GPS fix, excluding nodes flagged foreign_advert.
-// Foreign-flagged nodes have GPS positions the operator's own geo_filter
-// says shouldn't be trusted (see NodePassesGeoFilter in cmd/ingestor) —
-// including one would badly distort a coverage hull with an implausible
-// position. Read-only — safe on the server's mode=ro handle.
-func (db *DB) GetNodesWithScope() ([]ScopeCoverageNode, error) {
-	if !db.hasDefaultScope {
-		return nil, fmt.Errorf("default_scope column not present — run ingestor to apply migrations")
-	}
+// GetNodesWithPosition returns every node with a GPS fix, excluding nodes
+// flagged foreign_advert. Foreign-flagged nodes have GPS positions the
+// operator's own geo_filter says shouldn't be trusted (see
+// NodePassesGeoFilter in cmd/ingestor) — including one would badly
+// distort a coverage hull with an implausible position. Read-only — safe
+// on the server's mode=ro handle.
+func (db *DB) GetNodesWithPosition() ([]NodeWithPosition, error) {
 	rows, err := db.conn.Query(`
-		SELECT public_key, name, default_scope, lat, lon
+		SELECT public_key, name, lat, lon
 		FROM nodes
-		WHERE default_scope IS NOT NULL AND default_scope != ''
-		  AND lat IS NOT NULL AND lon IS NOT NULL
+		WHERE lat IS NOT NULL AND lon IS NOT NULL
 		  AND (foreign_advert IS NULL OR foreign_advert = 0)
 	`)
 	if err != nil {
-		return nil, fmt.Errorf("query nodes with scope: %w", err)
+		return nil, fmt.Errorf("query nodes with position: %w", err)
 	}
 	defer rows.Close()
 
-	var out []ScopeCoverageNode
+	var out []NodeWithPosition
 	for rows.Next() {
-		var n ScopeCoverageNode
+		var n NodeWithPosition
 		var name sql.NullString
-		if err := rows.Scan(&n.PubKey, &name, &n.Scope, &n.Lat, &n.Lon); err != nil {
-			return nil, fmt.Errorf("scan node with scope: %w", err)
+		if err := rows.Scan(&n.PubKey, &name, &n.Lat, &n.Lon); err != nil {
+			return nil, fmt.Errorf("scan node with position: %w", err)
 		}
 		n.Name = name.String
 		out = append(out, n)
