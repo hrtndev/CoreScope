@@ -143,7 +143,16 @@ async function run() {
       const cs = getComputedStyle(panel);
       const rect = panel.getBoundingClientRect();
       // Check that section content (e.g., labels) is visible on desktop.
-      const allInputs = panel.querySelectorAll('input[type=checkbox], select, button');
+      // A handful of controls are legitimately hidden regardless of
+      // desktop/accordion state — their parent <label> stays
+      // style="display:none" until a runtime precondition is met (geo
+      // filter configured, hash regions configured with relay evidence,
+      // affinity debug API key present). None of that is present in the
+      // E2E fixture, so exclude them by id instead of an accordion-vs-not
+      // visibility check.
+      const conditionallyHiddenIds = new Set(['mcGeoFilter', 'mcScopeCoverage', 'mcAffinityDebug']);
+      const allInputs = Array.from(panel.querySelectorAll('input[type=checkbox], select, button'))
+        .filter(el => !conditionallyHiddenIds.has(el.id));
       let visible = 0;
       allInputs.forEach(el => {
         const r = el.getBoundingClientRect();
@@ -161,9 +170,10 @@ async function run() {
       'desktop panel must be position:absolute, got ' + data.position);
     assert(data.width < data.vw * 0.5,
       'desktop panel must be <50% viewport width, got ' + data.width + '/' + data.vw);
-    // All (or nearly all) controls should be visible on desktop — accordion
-    // collapse must NOT apply at desktop sizes.
-    assert(data.visibleControls >= data.totalControls - 2,
+    // All controls (besides the conditionally-hidden ones excluded above)
+    // should be visible on desktop — accordion collapse must NOT apply at
+    // desktop sizes.
+    assert(data.visibleControls === data.totalControls,
       'desktop must show all controls (got ' + data.visibleControls + '/' + data.totalControls + ')');
   });
 
