@@ -228,7 +228,6 @@
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
             <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage</label>
-            <div id="mcScopeCoverageLegend" style="display:none;margin-top:4px;padding-left:20px;"></div>
           </fieldset>
           <div id="mapAreaFilter"></div>
           <fieldset class="mc-section">
@@ -2143,49 +2142,16 @@
     });
   }
 
-  // Legend row hover → highlight the matching map shape, same as hovering
-  // the shape itself — the guaranteed selection path regardless of how
-  // deeply a region is buried under overlapping siblings on the map.
-  function _highlightScopeCoverageRegion(name, on) {
-    _setScopeCoverageHighlighted(on ? [name] : []);
+  // Swatch matching a region's polygon fill color, for use inline in
+  // hover tooltips/click popups — since the sidebar legend (which used to
+  // be the only place mapping a region name to its color) is gone, the
+  // on-map hover/click content is now the only place that mapping shows.
+  function _scopeRegionColor(name) {
+    return window.HashColor ? HashColor.hashToHsl(_regionNameToHex(name), _isDarkTheme() ? 'dark' : 'light') : '#888';
   }
-
-  function renderScopeCoverageLegend(theme) {
-    var legendEl = document.getElementById('mcScopeCoverageLegend');
-    if (!legendEl) return;
-    if (!scopeCoverageData || !scopeCoverageData.regions || !scopeCoverageData.regions.length) {
-      legendEl.style.display = 'none';
-      legendEl.innerHTML = '';
-      return;
-    }
-    legendEl.style.display = '';
-    legendEl.innerHTML = '';
-    scopeCoverageData.regions.forEach(function (region) {
-      var color = window.HashColor ? HashColor.hashToHsl(_regionNameToHex(region.name), theme) : '#888';
-      var row = document.createElement('div');
-      row.title = 'Click to locate on the map';
-      row.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-top:2px;cursor:pointer;padding:1px 3px;border-radius:3px;';
-      row.innerHTML = '<span style="width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>' +
-        safeEsc(region.name) + ' <span style="color:var(--text-subtle)">(' + region.nodeCount + ')</span>';
-      row.addEventListener('mouseenter', function () {
-        row.style.background = 'var(--row-hover, rgba(128,128,128,0.15))';
-        _highlightScopeCoverageRegion(region.name, true);
-      });
-      row.addEventListener('mouseleave', function () {
-        row.style.background = '';
-        _highlightScopeCoverageRegion(region.name, false);
-      });
-      row.addEventListener('click', function () {
-        var shape = scopeCoverageShapesByName && scopeCoverageShapesByName[region.name];
-        if (!shape) return;
-        var cb = document.getElementById('mcScopeCoverage');
-        if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
-        if (shape.getBounds) { map.fitBounds(shape.getBounds(), { maxZoom: 12, padding: [40, 40] }); }
-        else if (shape.getLatLng) { map.setView(shape.getLatLng(), Math.max(map.getZoom(), 10)); }
-        shape.openPopup();
-      });
-      legendEl.appendChild(row);
-    });
+  function _scopeRegionSwatchHtml(name) {
+    return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' +
+      _scopeRegionColor(name) + ';margin-right:5px;vertical-align:middle;"></span>';
   }
 
   // Rebuilds scopeCoverageLayer from scopeCoverageData. Called on initial
@@ -2255,7 +2221,6 @@
     scopeCoverageLayer = L.layerGroup(shapes);
     var el = document.getElementById('mcScopeCoverage');
     if (el && el.checked) scopeCoverageLayer.addTo(map);
-    renderScopeCoverageLegend(theme);
   }
 
   // Map-level mousemove: finds every polygon region containing the cursor
@@ -2272,9 +2237,9 @@
     }
     _setScopeCoverageHighlighted(matches.map(function (r) { return r.name; }));
     var content = matches.length === 1
-      ? safeEsc(matches[0].name) + ' <span style="opacity:0.75">(' + matches[0].nodeCount + ')</span>'
+      ? _scopeRegionSwatchHtml(matches[0].name) + safeEsc(matches[0].name) + ' <span style="opacity:0.75">(' + matches[0].nodeCount + ')</span>'
       : '<strong>' + matches.length + ' overlapping here:</strong><br>' + matches.map(function (r) {
-          return safeEsc(r.name) + ' <span style="opacity:0.75">(' + r.nodeCount + ')</span>';
+          return _scopeRegionSwatchHtml(r.name) + safeEsc(r.name) + ' <span style="opacity:0.75">(' + r.nodeCount + ')</span>';
         }).join('<br>');
     if (!scopeCoverageHoverTooltip) {
       scopeCoverageHoverTooltip = L.tooltip({ sticky: true, direction: 'top', opacity: 0.95 }).setLatLng(e.latlng).setContent(content).openOn(map);
@@ -2294,7 +2259,7 @@
     if (matches.length === 1) {
       var r = matches[0];
       L.popup({ maxWidth: 260 }).setLatLng(e.latlng)
-        .setContent('<strong>' + safeEsc(r.name) + '</strong><br>' + r.nodeCount + ' node' + (r.nodeCount === 1 ? '' : 's'))
+        .setContent(_scopeRegionSwatchHtml(r.name) + '<strong>' + safeEsc(r.name) + '</strong><br>' + r.nodeCount + ' node' + (r.nodeCount === 1 ? '' : 's'))
         .openOn(map);
       return;
     }
@@ -2304,7 +2269,11 @@
     container.appendChild(header);
     matches.forEach(function (region) {
       var row = document.createElement('div');
-      row.textContent = region.name + ' (' + region.nodeCount + ')';
+      var swatch = document.createElement('span');
+      swatch.style.cssText = 'display:inline-block;width:9px;height:9px;border-radius:50%;background:' +
+        _scopeRegionColor(region.name) + ';margin-right:5px;vertical-align:middle;';
+      row.appendChild(swatch);
+      row.appendChild(document.createTextNode(region.name + ' (' + region.nodeCount + ')'));
       row.style.cssText = 'cursor:pointer;padding:2px 0;';
       row.addEventListener('mouseenter', function () { _setScopeCoverageHighlighted([region.name]); });
       row.addEventListener('click', function () {
