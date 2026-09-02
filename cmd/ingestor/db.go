@@ -1289,6 +1289,22 @@ func (s *Store) RunIncrementalVacuum(pages int) {
 	}
 }
 
+// Optimize runs PRAGMA optimize, SQLite's lightweight incremental stats
+// refresh. Without ever running this (or a full ANALYZE), sqlite_stat1
+// never exists and the query planner has zero cardinality information —
+// which is exactly what caused GetScopedRelayHops (cmd/server/db.go) to
+// pick a full 2M-row scan of observations instead of the ~67-row
+// idx_tx_scope_name lookup it was written for, turning a 20ms query into
+// 10-120s+ under production load. PRAGMA optimize is designed to be cheap
+// to call often — it only re-analyzes tables/indexes SQLite judges need
+// it — so this runs on the same cadence as the WAL checkpoint below
+// rather than as a rare maintenance task.
+func (s *Store) Optimize() {
+	if _, err := s.instrumentedExec("optimize", "PRAGMA optimize"); err != nil {
+		log.Printf("[db] PRAGMA optimize error: %v", err)
+	}
+}
+
 // Checkpoint runs a WAL checkpoint (TRUNCATE mode).
 // Returns the number of WAL frames checkpointed (0 if WAL was already empty).
 // TRUNCATE resets the WAL file to zero bytes when all frames are checkpointed;
