@@ -32,7 +32,7 @@ const EXPECTED_TABS = ['home', 'packets', 'live', 'map', 'channels', 'more'];
 // #1174: long-tail routes surfaced in the More sheet (the routes NOT in
 // the 5 primary bottom-nav slots). Mirror data-route values from the
 // existing top-nav.
-const EXPECTED_MORE_ROUTES = ['nodes', 'tools', 'observers', 'analytics', 'perf', 'audio-lab'];
+const EXPECTED_MORE_ROUTES = ['nodes', 'tools', 'observers', 'analytics', 'perf', 'audio-lab', 'regions'];
 
 function isVisible(rect) {
   return rect && rect.width > 0 && rect.height > 0;
@@ -239,7 +239,7 @@ async function main() {
   if (sheetOpen.present && sheetOpen.role === 'menu') pass('(h) sheet role="menu"');
   else if (sheetOpen.present) fail(`(h) sheet role should be 'menu', got ${sheetOpen.role}`);
   if (sheetOpen.present && sheetOpen.missing.length === 0) {
-    pass(`(h) sheet lists all 6 long-tail routes: ${sheetOpen.itemRoutes.join(',')}`);
+    pass(`(h) sheet lists all ${EXPECTED_MORE_ROUTES.length} long-tail routes: ${sheetOpen.itemRoutes.join(',')}`);
   } else if (sheetOpen.present) {
     fail(`(h) sheet missing routes: ${sheetOpen.missing.join(',')} (got ${sheetOpen.itemRoutes.join(',')})`);
   }

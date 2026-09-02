@@ -108,6 +108,75 @@ func (s *Server) handleScopeCoverage(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
+// handleScopeCoverageNodes is /api/scope-coverage's sibling: instead of
+// each region's aggregate coverage shape, it answers the inverse
+// question — for every node with a GPS fix, which hash region(s) has it
+// actually relayed traffic for. A node sitting on a region boundary can
+// belong to more than one, which is exactly why this is a per-node list
+// of regions rather than handleScopeCoverage's per-region list of nodes:
+// the Regions page needs to filter/color node markers by membership, and
+// a node can't be colored by "one" region if it's really in three.
+//
+// Same relay-evidence semantics and blacklist/hidden-name filtering as
+// handleScopeCoverage — see that handler's doc comment for why
+// GetScopedRelayHops (not nodes.default_scope) is the right data source.
+func (s *Server) handleScopeCoverageNodes(w http.ResponseWriter, r *http.Request) {
+	s.scopeCoverageNodesMu.Lock()
+	if s.scopeCoverageNodesCache != nil && time.Since(s.scopeCoverageNodesCachedAt) < scopeCoverageTTL {
+		cached := s.scopeCoverageNodesCache
+		s.scopeCoverageNodesMu.Unlock()
+		writeJSON(w, cached)
+		return
+	}
+	s.scopeCoverageNodesMu.Unlock()
+
+	hopScopes, err := s.db.GetScopedRelayHops()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := &ScopeCoverageNodesResponse{Nodes: []ScopeCoverageNode{}}
+	if len(hopScopes) > 0 {
+		nodes, err := s.db.GetNodesWithPosition()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		posByPubkey := make(map[string]NodeWithPosition, len(nodes))
+		for _, n := range nodes {
+			posByPubkey[strings.ToLower(n.PubKey)] = n
+		}
+
+		regionsByPubkey := make(map[string][]string)
+		for scope, pubkeys := range hopScopes {
+			for pk := range pubkeys {
+				pos, ok := posByPubkey[pk]
+				if !ok {
+					continue
+				}
+				if s.cfg.IsBlacklisted(pos.PubKey) || s.cfg.IsNameHidden(pos.Name) {
+					continue
+				}
+				regionsByPubkey[pos.PubKey] = append(regionsByPubkey[pos.PubKey], scope)
+			}
+		}
+
+		for pk, regions := range regionsByPubkey {
+			sort.Strings(regions)
+			resp.Nodes = append(resp.Nodes, ScopeCoverageNode{PubKey: pk, Regions: regions})
+		}
+		sort.Slice(resp.Nodes, func(i, j int) bool { return resp.Nodes[i].PubKey < resp.Nodes[j].PubKey })
+	}
+
+	s.scopeCoverageNodesMu.Lock()
+	s.scopeCoverageNodesCache = resp
+	s.scopeCoverageNodesCachedAt = time.Now()
+	s.scopeCoverageNodesMu.Unlock()
+
+	writeJSON(w, resp)
+}
+
 // convexHull computes the convex hull of pts using Andrew's monotone
 // chain algorithm, O(n log n). Treats each point as a generic 2D
 // coordinate — works identically regardless of axis order (pts here are

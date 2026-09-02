@@ -86,6 +86,13 @@ type Server struct {
 	scopeCoverageCache    *ScopeCoverageResponse
 	scopeCoverageCachedAt time.Time
 
+	// Cached /api/scope-coverage/nodes response — sibling to
+	// scopeCoverageCache above, same 30s TTL and single-global-snapshot
+	// reasoning (see scope_coverage.go).
+	scopeCoverageNodesMu       sync.Mutex
+	scopeCoverageNodesCache    *ScopeCoverageNodesResponse
+	scopeCoverageNodesCachedAt time.Time
+
 	// Router reference for OpenAPI spec generation
 	router *mux.Router
 
@@ -264,6 +271,10 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	// positions) — see scope_coverage.go for why this can't be an
 	// authoritative shape, only an inferred one.
 	r.HandleFunc("/api/scope-coverage", s.handleScopeCoverage).Methods("GET")
+	// Sibling to /api/scope-coverage: which nodes (not shapes) have
+	// relayed traffic for each hash region, for the Regions page's
+	// node-filtering view.
+	r.HandleFunc("/api/scope-coverage/nodes", s.handleScopeCoverageNodes).Methods("GET")
 	r.HandleFunc("/api/perf", s.handlePerf).Methods("GET")
 	r.HandleFunc("/api/perf/io", s.handlePerfIO).Methods("GET")
 	r.HandleFunc("/api/perf/sqlite", s.handlePerfSqlite).Methods("GET")

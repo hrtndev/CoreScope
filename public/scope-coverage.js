@@ -18,6 +18,41 @@
 // Each call to createScopeCoverageOverlay owns its own state (layer, fetched
 // data, shape-by-name index, shared hover tooltip) — safe to have one
 // instance per map even if more than one were ever alive at once.
+
+// Deterministic string -> 8-hex-char digest (FNV-1a 32-bit) so region
+// names (arbitrary strings like "#eu", not hex hashes) can feed
+// HashColor.hashToHsl the same way packet-hash coloring does elsewhere
+// (live.js, packets.js) — same visual language, no new color system.
+// Module-level (not per-overlay-instance) and unprefixed because other
+// pages that show region-tagged nodes without their own coverage overlay
+// (e.g. the standalone Regions page) need the exact same name -> color
+// mapping to stay visually consistent with the coverage shapes.
+function scopeCoverageRegionNameToHex(name) {
+  var h = 0x811c9dc5;
+  for (var i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return ('00000000' + h.toString(16)).slice(-8);
+}
+
+function scopeCoverageIsDarkTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ||
+    (document.documentElement.getAttribute('data-theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+// The name-to-color mapping itself — the only place a region name becomes
+// an actual color. Every polygon fill, marker fill, and swatch anywhere in
+// the app must go through this so the same region always renders the same
+// color no matter which page/overlay is drawing it.
+function scopeCoverageRegionColor(name) {
+  return window.HashColor ? HashColor.hashToHsl(scopeCoverageRegionNameToHex(name), scopeCoverageIsDarkTheme() ? 'dark' : 'light') : '#888';
+}
+function scopeCoverageRegionSwatchHtml(name) {
+  return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' +
+    scopeCoverageRegionColor(name) + ';margin-right:5px;vertical-align:middle;"></span>';
+}
+
 function createScopeCoverageOverlay(map, opts) {
   var checkboxId = opts.checkboxId;
   var labelId = opts.labelId;
@@ -33,24 +68,6 @@ function createScopeCoverageOverlay(map, opts) {
   var data = null; // last-fetched /api/scope-coverage response, kept for theme re-render
   var shapesByName = null; // region name -> its Leaflet shape, for highlight wiring
   var hoverTooltip = null; // shared tooltip instance for the map-level mousemove handler
-
-  // Deterministic string -> 8-hex-char digest (FNV-1a 32-bit) so region
-  // names (arbitrary strings like "#eu", not hex hashes) can feed
-  // HashColor.hashToHsl the same way packet-hash coloring does elsewhere
-  // (live.js, packets.js) — same visual language, no new color system.
-  function _regionNameToHex(name) {
-    var h = 0x811c9dc5;
-    for (var i = 0; i < name.length; i++) {
-      h ^= name.charCodeAt(i);
-      h = (h * 0x01000193) >>> 0;
-    }
-    return ('00000000' + h.toString(16)).slice(-8);
-  }
-
-  function _isDarkTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'dark' ||
-      (document.documentElement.getAttribute('data-theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  }
 
   // Rough planar polygon area (shoelace formula) — not a real geographic
   // measurement, just a relative size used to (a) paint larger regions
@@ -116,17 +133,6 @@ function createScopeCoverageOverlay(map, opts) {
     });
   }
 
-  // Swatch matching a region's polygon fill color, for use inline in
-  // hover tooltips/click popups — the only place the name-to-color
-  // mapping is surfaced (there is no separate legend).
-  function _regionColor(name) {
-    return window.HashColor ? HashColor.hashToHsl(_regionNameToHex(name), _isDarkTheme() ? 'dark' : 'light') : '#888';
-  }
-  function _swatchHtml(name) {
-    return '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' +
-      _regionColor(name) + ';margin-right:5px;vertical-align:middle;"></span>';
-  }
-
   // Rebuilds the layer from `data`. Called on initial load and again on
   // theme-refresh (colors are baked into shape styles via HashColor, not
   // CSS vars, so they need an explicit re-render).
@@ -134,7 +140,7 @@ function createScopeCoverageOverlay(map, opts) {
     if (layer) { map.removeLayer(layer); layer = null; }
     shapesByName = {};
     if (!data || !data.regions || !data.regions.length) return;
-    var theme = _isDarkTheme() ? 'dark' : 'light';
+    var theme = scopeCoverageIsDarkTheme() ? 'dark' : 'light';
 
     // Largest-area first so smaller/nested regions draw on top — see _hullArea.
     var regionsByZOrder = data.regions.slice().sort(function (a, b) {
@@ -144,7 +150,7 @@ function createScopeCoverageOverlay(map, opts) {
     var shapes = [];
     regionsByZOrder.forEach(function (region) {
       var hull = region.hull || [];
-      var colorHex = _regionNameToHex(region.name);
+      var colorHex = scopeCoverageRegionNameToHex(region.name);
       var fill = window.HashColor ? HashColor.hashToHsl(colorHex, theme) : '#888';
       var outline = window.HashColor ? HashColor.hashToOutline(colorHex, theme) : '#444';
       var shape, baseStyle, hoverStyle;
@@ -209,9 +215,9 @@ function createScopeCoverageOverlay(map, opts) {
     }
     _setHighlighted(matches.map(function (r) { return r.name; }));
     var content = matches.length === 1
-      ? _swatchHtml(matches[0].name) + esc(matches[0].name) + ' <span style="opacity:0.75">(' + matches[0].nodeCount + ')</span>'
+      ? scopeCoverageRegionSwatchHtml(matches[0].name) + esc(matches[0].name) + ' <span style="opacity:0.75">(' + matches[0].nodeCount + ')</span>'
       : '<strong>' + matches.length + ' overlapping here:</strong><br>' + matches.map(function (r) {
-          return _swatchHtml(r.name) + esc(r.name) + ' <span style="opacity:0.75">(' + r.nodeCount + ')</span>';
+          return scopeCoverageRegionSwatchHtml(r.name) + esc(r.name) + ' <span style="opacity:0.75">(' + r.nodeCount + ')</span>';
         }).join('<br>');
     if (!hoverTooltip) {
       hoverTooltip = L.tooltip({ sticky: true, direction: 'top', opacity: 0.95 }).setLatLng(e.latlng).setContent(content).openOn(map);
@@ -231,7 +237,7 @@ function createScopeCoverageOverlay(map, opts) {
     if (matches.length === 1) {
       var r = matches[0];
       L.popup({ maxWidth: 260 }).setLatLng(e.latlng)
-        .setContent(_swatchHtml(r.name) + '<strong>' + esc(r.name) + '</strong><br>' + r.nodeCount + ' node' + (r.nodeCount === 1 ? '' : 's'))
+        .setContent(scopeCoverageRegionSwatchHtml(r.name) + '<strong>' + esc(r.name) + '</strong><br>' + r.nodeCount + ' node' + (r.nodeCount === 1 ? '' : 's'))
         .openOn(map);
       return;
     }
@@ -243,7 +249,7 @@ function createScopeCoverageOverlay(map, opts) {
       var row = document.createElement('div');
       var swatch = document.createElement('span');
       swatch.style.cssText = 'display:inline-block;width:9px;height:9px;border-radius:50%;background:' +
-        _regionColor(region.name) + ';margin-right:5px;vertical-align:middle;';
+        scopeCoverageRegionColor(region.name) + ';margin-right:5px;vertical-align:middle;';
       row.appendChild(swatch);
       row.appendChild(document.createTextNode(region.name + ' (' + region.nodeCount + ')'));
       row.style.cssText = 'cursor:pointer;padding:2px 0;';

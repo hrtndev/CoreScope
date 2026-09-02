@@ -358,6 +358,132 @@ func TestHandleScopeCoverageMissingSchema(t *testing.T) {
 	}
 }
 
+func TestHandleScopeCoverageNodes(t *testing.T) {
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer conn.Close()
+	conn.SetMaxOpenConns(1)
+	db := &DB{conn: conn}
+	db.hasScopeName = true
+	db.hasResolvedPath = true
+
+	if _, err := conn.Exec(`CREATE TABLE nodes (
+		public_key TEXT PRIMARY KEY, name TEXT,
+		lat REAL, lon REAL, foreign_advert INTEGER
+	)`); err != nil {
+		t.Fatalf("create nodes: %v", err)
+	}
+	scopeCoverageSchema(t, conn)
+
+	nodes := []struct {
+		pk, name string
+		lat, lon float64
+	}{
+		{"pk-boundary", "Boundary", 0, 0},   // relays for BOTH #eu and #usa
+		{"pk-eu-only", "EuOnly", 0, 10},     // relays for #eu only
+		{"pk-blacklisted", "Blacklisted", 5, 5},
+		{"pk-advert-only", "AdvertOnly", 20, 20}, // own ADVERT only — must NOT count
+	}
+	for _, n := range nodes {
+		if _, err := conn.Exec(
+			`INSERT INTO nodes (public_key, name, lat, lon, foreign_advert) VALUES (?, ?, ?, ?, 0)`,
+			n.pk, n.name, n.lat, n.lon,
+		); err != nil {
+			t.Fatalf("insert %s: %v", n.pk, err)
+		}
+	}
+
+	insertTx := func(id, payloadType int, scope string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO transmissions (id, payload_type, scope_name) VALUES (?, ?, ?)`, id, payloadType, scope); err != nil {
+			t.Fatalf("insert tx %d: %v", id, err)
+		}
+	}
+	insertObs := func(txID int, resolvedPath string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO observations (transmission_id, resolved_path) VALUES (?, ?)`, txID, resolvedPath); err != nil {
+			t.Fatalf("insert obs for tx %d: %v", txID, err)
+		}
+	}
+
+	// pk-boundary relays both #eu and #usa traffic — must appear in both regions' lists.
+	insertTx(1, 1, "#eu")
+	insertObs(1, `["pk-boundary","pk-eu-only"]`)
+	insertTx(2, 1, "#usa")
+	insertObs(2, `["pk-boundary"]`)
+	// pk-blacklisted relayed #eu too, but must be filtered by blacklist.
+	insertTx(3, 1, "#eu")
+	insertObs(3, `["pk-blacklisted"]`)
+	// pk-advert-only's only evidence is its own ADVERT — must NOT count.
+	insertTx(4, payloadTypeAdvert, "#japan")
+	insertObs(4, `["pk-advert-only"]`)
+
+	cfg := &Config{}
+	cfg.SetNodeBlacklist([]string{"pk-blacklisted"})
+	srv := &Server{db: db, cfg: cfg}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/scope-coverage/nodes", nil)
+	w := httptest.NewRecorder()
+	srv.handleScopeCoverageNodes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp ScopeCoverageNodesResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Nodes) != 2 {
+		t.Fatalf("got %d nodes, want 2 (pk-boundary, pk-eu-only — not blacklisted/advert-only): %+v", len(resp.Nodes), resp.Nodes)
+	}
+
+	byPubkey := make(map[string]ScopeCoverageNode, len(resp.Nodes))
+	for _, n := range resp.Nodes {
+		byPubkey[n.PubKey] = n
+	}
+	boundary, ok := byPubkey["pk-boundary"]
+	if !ok {
+		t.Fatalf("pk-boundary missing from response: %+v", resp.Nodes)
+	}
+	if !reflect.DeepEqual(boundary.Regions, []string{"#eu", "#usa"}) {
+		t.Errorf("pk-boundary Regions = %v, want [#eu #usa] (multi-region membership)", boundary.Regions)
+	}
+	euOnly, ok := byPubkey["pk-eu-only"]
+	if !ok {
+		t.Fatalf("pk-eu-only missing from response: %+v", resp.Nodes)
+	}
+	if !reflect.DeepEqual(euOnly.Regions, []string{"#eu"}) {
+		t.Errorf("pk-eu-only Regions = %v, want [#eu]", euOnly.Regions)
+	}
+}
+
+func TestHandleScopeCoverageNodesMissingSchema(t *testing.T) {
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer conn.Close()
+	db := &DB{conn: conn}
+	srv := &Server{db: db, cfg: &Config{}}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/scope-coverage/nodes", nil)
+	w := httptest.NewRecorder()
+	srv.handleScopeCoverageNodes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp ScopeCoverageNodesResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Nodes) != 0 {
+		t.Errorf("Nodes = %+v, want empty", resp.Nodes)
+	}
+}
+
 func sortedPoints(pts []ScopeCoveragePoint) []ScopeCoveragePoint {
 	out := make([]ScopeCoveragePoint, len(pts))
 	copy(out, pts)
