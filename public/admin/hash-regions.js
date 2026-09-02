@@ -70,7 +70,7 @@
       tr.className = 'empty-row';
       var td = document.createElement('td');
       td.colSpan = 2;
-      td.textContent = 'No hash regions configured yet.';
+      td.textContent = 'No regions configured yet.';
       tr.appendChild(td);
       listBody.appendChild(tr);
       return;

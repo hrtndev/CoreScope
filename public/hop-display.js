@@ -32,7 +32,7 @@ window.HopDisplay = (function() {
     const regional = conflicts.filter(c => c.regional);
     const shown = regional.length > 0 ? regional : conflicts;
 
-    let html = `<div class="hop-conflict-header">${escapeHtml(h)} — ${shown.length} candidate${shown.length > 1 ? 's' : ''}${regional.length > 0 ? ' in region' : ' (global fallback)'}</div>`;
+    let html = `<div class="hop-conflict-header">${escapeHtml(h)} — ${shown.length} candidate${shown.length > 1 ? 's' : ''}${regional.length > 0 ? ' in IATA region' : ' (global fallback)'}</div>`;
     html += '<div class="hop-conflict-list">';
     for (const c of shown) {
       const name = escapeHtml(c.name || c.pubkey?.slice(0, 16) || '?');
@@ -130,11 +130,11 @@ window.HopDisplay = (function() {
   const WARN_PH = '<svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-warning"/></svg>';
   const PATH_SYMBOLS_LEGEND = [
     { glyphHtml: '<span class="status-warn">' + WARN_PH + 'N</span>',
-      description: 'Yellow button next to a hop — N regional candidates share this hop\u2019s prefix. Click for the candidate list.' },
+      description: 'Yellow button next to a hop — N IATA-regional candidates share this hop\u2019s prefix. Click for the candidate list.' },
     { glyphHtml: '<span class="status-warn">' + WARN_PH + '</span>',
       description: 'Warning icon alone (no number) — unreliable name resolution: the best-guess pubkey couldn\u2019t be confirmed against surrounding path hops.' },
     { glyphHtml: 'dashed underline',
-      description: 'Ambiguous or global-fallback resolution — the name matched outside the current region.' },
+      description: 'Ambiguous or global-fallback resolution — the name matched outside the current IATA region.' },
   ];
 
   function renderPathSymbolsLegend() {

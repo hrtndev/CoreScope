@@ -2484,7 +2484,7 @@
         // ("not shown with the active filter") rather than claiming a cause.
         const hiddenByFilter = [...favs].filter(pk => !allByPk.has(pk)).length;
         const filterNotice = (filterActive && hiddenByFilter > 0)
-          ? `<p class="text-muted" style="display:flex;gap:6px;align-items:center"><svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-funnel"/></svg>${hiddenByFilter} favorite${hiddenByFilter === 1 ? '' : 's'} not shown with the active region/area filter.</p>`
+          ? `<p class="text-muted" style="display:flex;gap:6px;align-items:center"><svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-funnel"/></svg>${hiddenByFilter} favorite${hiddenByFilter === 1 ? '' : 's'} not shown with the active IATA region/area filter.</p>`
           : '';
 
         let active = 0, degraded = 0, silent = 0, clockOk = 0, totalRelay24 = 0;
@@ -3398,7 +3398,7 @@ function destroy() { _stopRolesRefresh(); _stopScopesRefresh(); _analyticsData =
     const initGenerate = hashParams.get('generate') || '';
 
     const regionNote = regionLabel
-      ? `<p class="text-muted" style="font-size:0.85em;margin:4px 0 0">Showing data for region: <strong>${esc(regionLabel)}</strong>. <a href="#/analytics?tab=prefix-tool" style="color:var(--link-color)">Check all repeaters →</a></p>`
+      ? `<p class="text-muted" style="font-size:0.85em;margin:4px 0 0">Showing data for IATA region: <strong>${esc(regionLabel)}</strong>. <a href="#/analytics?tab=prefix-tool" style="color:var(--link-color)">Check all repeaters →</a></p>`
       : '';
 
     el.innerHTML = `

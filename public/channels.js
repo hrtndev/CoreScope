@@ -2168,7 +2168,7 @@
       // REST fetch was in flight aren't stomped.
       messages = mergeWsAppendedIntoRest(messages, data.messages || []);
       if (messages.length === 0 && rp) {
-        msgEl.innerHTML = '<div class="ch-empty">Channel not available in selected region</div>';
+        msgEl.innerHTML = '<div class="ch-empty">Channel not available in selected IATA region</div>';
       } else {
         renderMessages();
         scrollToBottom();
@@ -2198,7 +2198,7 @@
       const newMsgs = data.messages || [];
       if (opts.regionSwitch && rp && newMsgs.length === 0) {
         messages = [];
-        msgEl.innerHTML = '<div class="ch-empty">Channel not available in selected region</div>';
+        msgEl.innerHTML = '<div class="ch-empty">Channel not available in selected IATA region</div>';
         document.getElementById('chScrollBtn')?.classList.add('hidden');
         return;
       }

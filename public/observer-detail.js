@@ -213,7 +213,7 @@ window.ObserverDetailNaiveBanner = {
           <div class="stat-value">${obs.can_relay === false ? '<span class="badge-listener" title="Firmware reported repeat:off — excluded from path-hop disambiguator (#1290)">listener</span>' : (obs.can_relay === true ? '<span class="badge-repeater" title="Firmware reported repeat:on — eligible as a path hop">repeater</span>' : '<span class="text-muted" title="No repeat field received yet — unknown until firmware publishes a /status">—</span>')}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Region</div>
+          <div class="stat-label">IATA Region</div>
           <div class="stat-value">${obs.iata ? '<span class="badge-region">' + escapeHtml(obs.iata) + '</span>' : '—'}</div>
         </div>
         <div class="stat-card">

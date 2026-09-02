@@ -1153,7 +1153,7 @@
             <label><input type="checkbox" id="liveMultibyteToggle" aria-describedby="multibyteDesc"> Multibyte only</label>
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
-            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Hash region coverage <span class="badge badge-new">Beta</span></label>
+            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Region coverage <span class="badge badge-new">Beta</span></label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1643,7 +1643,7 @@
         if (!window.RegionShowAll) return;
         var wrap = document.createElement('label');
         wrap.className = 'live-show-all-region-nodes';
-        wrap.title = 'When a region is selected, show every node on the map (legacy behavior). Off = hide non-region nodes.';
+        wrap.title = 'When an IATA region is selected, show every node on the map (legacy behavior). Off = hide non-IATA-region nodes.';
         var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.id = 'liveShowAllRegionNodes';
@@ -2575,7 +2575,7 @@
 
       if (observers.length) {
         const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))];
-        html += `<h4 style="font-size:12px;margin:12px 0 6px;color:var(--text-muted);">Heard By${regions.length ? ' — Regions: ' + regions.join(', ') : ''}</h4>
+        html += `<h4 style="font-size:12px;margin:12px 0 6px;color:var(--text-muted);">Heard By${regions.length ? ' — IATA Regions: ' + regions.join(', ') : ''}</h4>
           <div style="font-size:11px;">` +
           observers.map(o => `<div style="padding:2px 0;"><a href="#/observers/${encodeURIComponent(o.observer_id)}" style="color:var(--link-color);text-decoration:none;">${escapeHtml(o.observer_name || o.observer_id.slice(0, 12))}${o.iata ? ' (' + escapeHtml(o.iata) + ')' : ''}</a> — ${o.packetCount || o.count || 0} pkts</div>`).join('') +
           '</div>';

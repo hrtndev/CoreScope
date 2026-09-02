@@ -79,7 +79,7 @@
       tr.className = 'empty-row';
       var td = document.createElement('td');
       td.colSpan = 3;
-      td.textContent = 'No regions configured or observed yet.';
+      td.textContent = 'No IATA regions configured or observed yet.';
       tr.appendChild(td);
       listBody.appendChild(tr);
       return;

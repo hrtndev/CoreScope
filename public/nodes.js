@@ -721,12 +721,12 @@
         </div>
 
         ${observers.length ? `<div class="node-full-card" id="node-observers">
-          ${(() => { const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))]; return regions.length ? `<div style="margin-bottom:8px"><strong>Regions:</strong> ${regions.map(r => '<span class="badge" style="margin:0 2px">' + escapeHtml(r) + '</span>').join(' ')}</div>` : ''; })()}
+          ${(() => { const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))]; return regions.length ? `<div style="margin-bottom:8px"><strong>IATA Regions:</strong> ${regions.map(r => '<span class="badge" style="margin:0 2px">' + escapeHtml(r) + '</span>').join(' ')}</div>` : ''; })()}
           <h4>Heard By (${observers.length} observer${observers.length > 1 ? 's' : ''})</h4>
           <table class="data-table observer-sort-table" style="font-size:12px">
             <thead><tr>
               <th scope="col" data-sort-key="observer">Observer</th>
-              <th scope="col" data-sort-key="region">Region</th>
+              <th scope="col" data-sort-key="region">IATA Region</th>
               <th scope="col" data-sort-key="packets" data-type="numeric" data-sort-default="desc">Packets</th>
               <th scope="col" data-sort-key="snr" data-type="numeric" data-sort-default="desc">Avg SNR</th>
               <th scope="col" data-sort-key="rssi" data-type="numeric" data-sort-default="desc">Avg RSSI</th>
@@ -1761,7 +1761,7 @@
         </div>
 
         ${observers.length ? `<div class="node-detail-section">
-          ${(() => { const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))]; return regions.length ? `<div style="margin-bottom:6px;font-size:12px"><strong>Regions:</strong> ${regions.join(', ')}</div>` : ''; })()}
+          ${(() => { const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))]; return regions.length ? `<div style="margin-bottom:6px;font-size:12px"><strong>IATA Regions:</strong> ${regions.join(', ')}</div>` : ''; })()}
           <h4>Heard By (${observers.length} observer${observers.length > 1 ? 's' : ''})</h4>
           <div class="observer-list">
             ${observers.map(o => {

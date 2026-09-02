@@ -224,7 +224,7 @@
             <label for="mcHashLabels"><input type="checkbox" id="mcHashLabels"> Hash prefix labels</label>
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
-            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Hash region coverage <span class="badge badge-new">Beta</span></label>
+            <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Region coverage <span class="badge badge-new">Beta</span></label>
           </fieldset>
           <div id="mapAreaFilter"></div>
           <fieldset class="mc-section">
@@ -256,7 +256,7 @@
           </fieldset>
           <fieldset class="mc-section">
             <legend class="mc-label">Quick Jump</legend>
-            <div class="mc-jumps" id="mcJumps" role="group" aria-label="Jump to region"></div>
+            <div class="mc-jumps" id="mcJumps" role="group" aria-label="Jump to IATA region"></div>
           </fieldset>
         </div>
       </div>`;
@@ -1452,7 +1452,7 @@
     // Also extract regions from node locations if we have them
     el.innerHTML = '';
     if (regions.size === 0) {
-      el.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">No regions yet</span>';
+      el.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">No IATA regions yet</span>';
       return;
     }
     for (const r of [...regions].sort()) {
