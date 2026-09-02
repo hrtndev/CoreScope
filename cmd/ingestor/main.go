@@ -399,6 +399,22 @@ func main() {
 	}()
 	log.Printf("[db] WAL checkpoint scheduled every 1h")
 
+	// Hourly PRAGMA optimize so the query planner keeps working from live
+	// cardinality stats as transmissions/observations grow — see
+	// Store.Optimize's doc comment for the bad-plan bug this prevents.
+	// Runs once shortly after startup (this database has never had ANALYZE
+	// run on it, so the first call matters most) and then every hour
+	// alongside the WAL checkpoint.
+	optimizeTicker := time.NewTicker(1 * time.Hour)
+	go func() {
+		time.Sleep(45 * time.Second)
+		store.Optimize()
+		for range optimizeTicker.C {
+			store.Optimize()
+		}
+	}()
+	log.Printf("[db] PRAGMA optimize scheduled every 1h")
+
 	// Daily neighbor_edges retention (#1287 — moved from cmd/server).
 	{
 		nDays := cfg.NeighborEdgesDaysOrDefault()

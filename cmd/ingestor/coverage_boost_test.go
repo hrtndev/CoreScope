@@ -637,6 +637,29 @@ func TestCheckpointDoesNotPanic(t *testing.T) {
 	store.Checkpoint()
 }
 
+// TestOptimizePopulatesStats guards against the exact regression this was
+// added for: without ever running ANALYZE/PRAGMA optimize, sqlite_stat1
+// never exists and the query planner picks catastrophically bad plans for
+// selective joins (cmd/server/db.go's GetScopedRelayHops went from 20ms to
+// 10-120s+ in production because of this). Store.Optimize() must actually
+// create sqlite_stat1, not just avoid panicking.
+func TestOptimizePopulatesStats(t *testing.T) {
+	store := newTestStore(t)
+	var before int
+	store.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sqlite_stat1'`).Scan(&before)
+	if before != 0 {
+		t.Fatalf("test fixture already has sqlite_stat1 before Optimize() — test can't verify anything")
+	}
+	store.Optimize()
+	var after int
+	if err := store.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sqlite_stat1'`).Scan(&after); err != nil {
+		t.Fatalf("query sqlite_master after Optimize(): %v", err)
+	}
+	if after != 1 {
+		t.Fatalf("expected Optimize() to create sqlite_stat1, got count=%d", after)
+	}
+}
+
 func TestLogStatsDoesNotPanic(t *testing.T) {
 	store := newTestStore(t)
 	store.Stats.TransmissionsInserted.Add(5)
