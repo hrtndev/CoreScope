@@ -17,6 +17,8 @@
   let geoFilterLayer = null;
   let scopeCoverageLayer = null;
   let scopeCoverageData = null; // last-fetched /api/scope-coverage response, kept for theme re-render
+  let scopeCoverageShapesByName = null; // region name -> its Leaflet shape, for legend hover/click wiring
+  let scopeCoverageHoverTooltip = null; // shared tooltip instance for the map-level mousemove handler
   let affinityLayer = null;
   let affinityData = null;
   let userHasMoved = false;
@@ -636,6 +638,8 @@
           });
         }
         renderScopeCoverageLayer();
+        map.on('mousemove', _onScopeCoverageMouseMove);
+        map.on('click', _onScopeCoverageMapClick);
       } catch (e) { /* no hash regions configured / endpoint unavailable */ }
     })();
 
@@ -2006,6 +2010,8 @@
     geoFilterLayer = null;
     scopeCoverageLayer = null;
     scopeCoverageData = null;
+    scopeCoverageShapesByName = null;
+    scopeCoverageHoverTooltip = null;
     selectedReferenceNode = null;
     neighborPubkeys = null;
     delete window._mapSelectRefNode;
@@ -2071,6 +2077,79 @@
       (document.documentElement.getAttribute('data-theme') !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
 
+  // Rough planar polygon area (shoelace formula) — not a real geographic
+  // measurement, just a relative size used to (a) paint larger regions
+  // first so they sit visually "under" smaller ones by default, and (b)
+  // order a multi-region match list smallest/most-specific first. Actual
+  // hover/click selection does NOT depend on paint order — see
+  // _pointInHull below — because regions often overlap in ways that
+  // aren't cleanly nested (a "smaller-sounding" region's hull can end up
+  // numerically larger than a region that contains it, if even one member
+  // node's position pulls it wide), so no fixed z-order can guarantee
+  // every region keeps an exposed, clickable sliver.
+  function _hullArea(hull) {
+    if (!hull || hull.length < 3) return 0;
+    var area = 0;
+    for (var i = 0; i < hull.length; i++) {
+      var p1 = hull[i], p2 = hull[(i + 1) % hull.length];
+      area += p1[0] * p2[1] - p2[0] * p1[1];
+    }
+    return Math.abs(area / 2);
+  }
+
+  // Ray-casting point-in-polygon test. hull is [[lat,lon], ...]; treats
+  // lat/lon as generic planar x/y, consistent with _hullArea/convexHull.
+  function _pointInHull(latlng, hull) {
+    if (!hull || hull.length < 3) return false;
+    var x = latlng.lat, y = latlng.lng;
+    var inside = false;
+    for (var i = 0, j = hull.length - 1; i < hull.length; j = i++) {
+      var xi = hull[i][0], yi = hull[i][1];
+      var xj = hull[j][0], yj = hull[j][1];
+      var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // Every polygon region (3+ point hull) whose area actually contains
+  // latlng — computed directly by geometry, not by which shape happens to
+  // be drawn on top, so a region buried under several others at a given
+  // pixel is still found here. Sorted smallest-area first (most specific).
+  function _scopeCoveragePolygonMatchesAt(latlng) {
+    if (!scopeCoverageData || !scopeCoverageData.regions) return [];
+    return scopeCoverageData.regions
+      .filter(function (r) { return r.hull && r.hull.length >= 3 && _pointInHull(latlng, r.hull); })
+      .sort(function (a, b) { return _hullArea(a.hull) - _hullArea(b.hull); });
+  }
+
+  // Single source of truth for "which regions are currently highlighted."
+  // Resets every shape not in names to its base style, applies the hover
+  // style + bringToFront to every shape in names. Used by the map
+  // mousemove/click handlers below AND by legend hover, so both paths
+  // agree on what's highlighted at any moment.
+  function _setScopeCoverageHighlighted(names) {
+    var wanted = {};
+    (names || []).forEach(function (n) { wanted[n] = true; });
+    Object.keys(scopeCoverageShapesByName || {}).forEach(function (name) {
+      var shape = scopeCoverageShapesByName[name];
+      if (!shape) return;
+      if (wanted[name]) {
+        if (shape._scopeHoverStyle) shape.setStyle(shape._scopeHoverStyle);
+        if (shape.bringToFront) shape.bringToFront();
+      } else if (shape._scopeBaseStyle) {
+        shape.setStyle(shape._scopeBaseStyle);
+      }
+    });
+  }
+
+  // Legend row hover → highlight the matching map shape, same as hovering
+  // the shape itself — the guaranteed selection path regardless of how
+  // deeply a region is buried under overlapping siblings on the map.
+  function _highlightScopeCoverageRegion(name, on) {
+    _setScopeCoverageHighlighted(on ? [name] : []);
+  }
+
   function renderScopeCoverageLegend(theme) {
     var legendEl = document.getElementById('mcScopeCoverageLegend');
     if (!legendEl) return;
@@ -2080,12 +2159,33 @@
       return;
     }
     legendEl.style.display = '';
-    legendEl.innerHTML = scopeCoverageData.regions.map(function (region) {
+    legendEl.innerHTML = '';
+    scopeCoverageData.regions.forEach(function (region) {
       var color = window.HashColor ? HashColor.hashToHsl(_regionNameToHex(region.name), theme) : '#888';
-      return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-top:2px;">' +
-        '<span style="width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>' +
-        safeEsc(region.name) + ' <span style="color:var(--text-subtle)">(' + region.nodeCount + ')</span></div>';
-    }).join('');
+      var row = document.createElement('div');
+      row.title = 'Click to locate on the map';
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-top:2px;cursor:pointer;padding:1px 3px;border-radius:3px;';
+      row.innerHTML = '<span style="width:10px;height:10px;border-radius:50%;background:' + color + ';flex-shrink:0;"></span>' +
+        safeEsc(region.name) + ' <span style="color:var(--text-subtle)">(' + region.nodeCount + ')</span>';
+      row.addEventListener('mouseenter', function () {
+        row.style.background = 'var(--row-hover, rgba(128,128,128,0.15))';
+        _highlightScopeCoverageRegion(region.name, true);
+      });
+      row.addEventListener('mouseleave', function () {
+        row.style.background = '';
+        _highlightScopeCoverageRegion(region.name, false);
+      });
+      row.addEventListener('click', function () {
+        var shape = scopeCoverageShapesByName && scopeCoverageShapesByName[region.name];
+        if (!shape) return;
+        var cb = document.getElementById('mcScopeCoverage');
+        if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+        if (shape.getBounds) { map.fitBounds(shape.getBounds(), { maxZoom: 12, padding: [40, 40] }); }
+        else if (shape.getLatLng) { map.setView(shape.getLatLng(), Math.max(map.getZoom(), 10)); }
+        shape.openPopup();
+      });
+      legendEl.appendChild(row);
+    });
   }
 
   // Rebuilds scopeCoverageLayer from scopeCoverageData. Called on initial
@@ -2094,31 +2194,127 @@
   // same reason renderMarkers() re-runs on theme-refresh for roles).
   function renderScopeCoverageLayer() {
     if (scopeCoverageLayer) { map.removeLayer(scopeCoverageLayer); scopeCoverageLayer = null; }
+    scopeCoverageShapesByName = {};
     if (!scopeCoverageData || !scopeCoverageData.regions || !scopeCoverageData.regions.length) return;
     var theme = _isDarkTheme() ? 'dark' : 'light';
+
+    // Largest-area first so smaller/nested regions draw on top — see _hullArea.
+    var regionsByZOrder = scopeCoverageData.regions.slice().sort(function (a, b) {
+      return _hullArea(b.hull) - _hullArea(a.hull);
+    });
+
     var shapes = [];
-    scopeCoverageData.regions.forEach(function (region) {
+    regionsByZOrder.forEach(function (region) {
       var hull = region.hull || [];
       var colorHex = _regionNameToHex(region.name);
       var fill = window.HashColor ? HashColor.hashToHsl(colorHex, theme) : '#888';
       var outline = window.HashColor ? HashColor.hashToOutline(colorHex, theme) : '#444';
-      var shape;
+      var shape, baseStyle, hoverStyle;
       if (hull.length >= 3) {
-        shape = L.polygon(hull, { color: outline, weight: 2, opacity: 0.8, fillColor: fill, fillOpacity: 0.15 });
+        baseStyle = { color: outline, weight: 2, opacity: 0.8, fillColor: fill, fillOpacity: 0.15 };
+        hoverStyle = { weight: 4, opacity: 1, fillOpacity: 0.4 };
+        shape = L.polygon(hull, baseStyle);
       } else if (hull.length === 2) {
-        shape = L.polyline(hull, { color: outline, weight: 3, opacity: 0.8, dashArray: '4 4' });
+        baseStyle = { color: outline, weight: 3, opacity: 0.8, dashArray: '4 4' };
+        hoverStyle = { weight: 5, opacity: 1 };
+        shape = L.polyline(hull, baseStyle);
       } else if (hull.length === 1) {
-        shape = L.circleMarker(hull[0], { radius: 10, color: outline, weight: 2, fillColor: fill, fillOpacity: 0.6 });
+        baseStyle = { radius: 10, color: outline, weight: 2, fillColor: fill, fillOpacity: 0.6 };
+        hoverStyle = { weight: 4, fillOpacity: 0.9 };
+        shape = L.circleMarker(hull[0], baseStyle);
       } else {
         return;
       }
-      shape.bindPopup('<strong>' + safeEsc(region.name) + '</strong><br>' + region.nodeCount + ' node' + (region.nodeCount === 1 ? '' : 's'));
+
+      shape._scopeBaseStyle = baseStyle;
+      shape._scopeHoverStyle = hoverStyle;
+
+      if (hull.length >= 3) {
+        // Polygons: no native hover/click bindings here at all — with
+        // overlapping hulls, Leaflet would only ever reach whichever shape
+        // happens to be topmost at that pixel, exactly the "can't hover
+        // it, too many layers on top" problem. Real selection instead
+        // happens via the map-level mousemove/click handlers below, which
+        // do their own point-in-polygon test against every region, so a
+        // fully-buried region is still reachable.
+      } else {
+        // Lines (2-point hulls) and single-point markers don't have the
+        // same overlap problem in practice, so they keep simple native
+        // Leaflet hover/click — routed through the same shared highlight
+        // function so legend hover and direct hover agree on state.
+        var label = safeEsc(region.name) + ' <span style="opacity:0.75">(' + region.nodeCount + ' node' + (region.nodeCount === 1 ? '' : 's') + ')</span>';
+        shape.bindTooltip(label, { sticky: true, direction: 'top', opacity: 0.95 });
+        shape.bindPopup('<strong>' + safeEsc(region.name) + '</strong><br>' + region.nodeCount + ' node' + (region.nodeCount === 1 ? '' : 's'));
+        shape.on('mouseover', function () { _setScopeCoverageHighlighted([region.name]); });
+        shape.on('mouseout', function () { _setScopeCoverageHighlighted([]); });
+      }
+
       shapes.push(shape);
+      scopeCoverageShapesByName[region.name] = shape;
     });
     scopeCoverageLayer = L.layerGroup(shapes);
     var el = document.getElementById('mcScopeCoverage');
     if (el && el.checked) scopeCoverageLayer.addTo(map);
     renderScopeCoverageLegend(theme);
+  }
+
+  // Map-level mousemove: finds every polygon region containing the cursor
+  // (not just whichever shape is visually on top) and highlights all of
+  // them, with a tooltip listing every match. This is what makes a region
+  // buried under several overlapping siblings still discoverable by hover.
+  function _onScopeCoverageMouseMove(e) {
+    if (!scopeCoverageLayer || !map.hasLayer(scopeCoverageLayer)) return;
+    var matches = _scopeCoveragePolygonMatchesAt(e.latlng);
+    if (!matches.length) {
+      _setScopeCoverageHighlighted([]);
+      if (scopeCoverageHoverTooltip) { map.closeTooltip(scopeCoverageHoverTooltip); scopeCoverageHoverTooltip = null; }
+      return;
+    }
+    _setScopeCoverageHighlighted(matches.map(function (r) { return r.name; }));
+    var content = matches.length === 1
+      ? safeEsc(matches[0].name) + ' <span style="opacity:0.75">(' + matches[0].nodeCount + ')</span>'
+      : '<strong>' + matches.length + ' overlapping here:</strong><br>' + matches.map(function (r) {
+          return safeEsc(r.name) + ' <span style="opacity:0.75">(' + r.nodeCount + ')</span>';
+        }).join('<br>');
+    if (!scopeCoverageHoverTooltip) {
+      scopeCoverageHoverTooltip = L.tooltip({ sticky: true, direction: 'top', opacity: 0.95 }).setLatLng(e.latlng).setContent(content).openOn(map);
+    } else {
+      scopeCoverageHoverTooltip.setLatLng(e.latlng).setContent(content);
+    }
+  }
+
+  // Map-level click: same point-in-polygon match set as hover, but opens a
+  // persistent popup. A single match gets its info directly; multiple
+  // matches get a clickable list so any region — no matter how deeply
+  // buried — can be definitively selected and highlighted.
+  function _onScopeCoverageMapClick(e) {
+    if (!scopeCoverageLayer || !map.hasLayer(scopeCoverageLayer)) return;
+    var matches = _scopeCoveragePolygonMatchesAt(e.latlng);
+    if (!matches.length) return;
+    if (matches.length === 1) {
+      var r = matches[0];
+      L.popup({ maxWidth: 260 }).setLatLng(e.latlng)
+        .setContent('<strong>' + safeEsc(r.name) + '</strong><br>' + r.nodeCount + ' node' + (r.nodeCount === 1 ? '' : 's'))
+        .openOn(map);
+      return;
+    }
+    var container = document.createElement('div');
+    var header = document.createElement('strong');
+    header.textContent = matches.length + ' overlapping regions here:';
+    container.appendChild(header);
+    matches.forEach(function (region) {
+      var row = document.createElement('div');
+      row.textContent = region.name + ' (' + region.nodeCount + ')';
+      row.style.cssText = 'cursor:pointer;padding:2px 0;';
+      row.addEventListener('mouseenter', function () { _setScopeCoverageHighlighted([region.name]); });
+      row.addEventListener('click', function () {
+        _setScopeCoverageHighlighted([region.name]);
+        container.querySelectorAll('div').forEach(function (r2) { r2.style.fontWeight = 'normal'; });
+        row.style.fontWeight = '700';
+      });
+      container.appendChild(row);
+    });
+    L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent(container).openOn(map);
   }
   // ─── End Hash Region Coverage Overlay ──────────────────────────────────────
 
