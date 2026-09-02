@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -12,20 +13,26 @@ import (
 const scopeCoverageTTL = 30 * time.Second
 
 // handleScopeCoverage groups repeaters/rooms by the hash regions they've
-// actually carried traffic FOR — RepeaterRelayInfo.TransportedScopes, the
-// deduplicated set of transmissions.scope_name values seen on non-ADVERT
-// packets where the node appeared as a path hop (see repeater_liveness.go
-// / repeater_enrich_bulk.go, #1751) — and returns the convex hull of each
-// region's member node positions. An area-like approximation of "what
-// geography does this hash region's traffic reach," inferred purely from
-// where relaying nodes actually are.
+// actually carried traffic FOR — GetScopedRelayHops' deduplicated set of
+// relay-hop pubkeys seen on non-ADVERT transmissions matching each
+// transmissions.scope_name — and returns the convex hull of each region's
+// member node positions. An area-like approximation of "what geography
+// does this hash region's traffic reach," inferred purely from where
+// relaying nodes actually are.
+//
+// Computed directly from transmissions+observations (see db.go's
+// GetScopedRelayHops), NOT from the in-memory PacketStore's
+// RepeaterRelayInfo.TransportedScopes — that would only cover whatever's
+// still resident in the store's bounded retention window. Querying the DB
+// means this works regardless of in-memory eviction, and even when no
+// store is wired at all.
 //
 // Deliberately NOT nodes.default_scope: that field only reflects a node's
 // own self-broadcast ADVERT scope (see shouldUpdateDefaultScope in
 // cmd/ingestor/main.go — it's gated to the ADVERT branch of ingest), i.e.
 // "what scope does this node claim to be in," not "whose traffic has it
 // actually carried." A repeater sitting on a region boundary can — and
-// should — contribute to more than one region's shape; TransportedScopes
+// should — contribute to more than one region's shape; GetScopedRelayHops
 // is a set for exactly this reason, default_scope is a single string.
 //
 // Hash regions carry no authoritative shape of their own
@@ -44,35 +51,37 @@ func (s *Server) handleScopeCoverage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.scopeCoverageMu.Unlock()
 
-	// TransportedScopes lives only in the in-memory packet store (it's
-	// derived from byPathHop, never persisted as its own column) — no
-	// store wired means no relay evidence to report, same as
-	// enrichNodeList's no-op guard.
-	if s.store == nil {
-		resp := &ScopeCoverageResponse{Regions: []ScopeCoverageRegion{}}
-		writeJSON(w, resp)
-		return
-	}
-
-	nodes, err := s.db.GetNodesWithPosition()
+	hopScopes, err := s.db.GetScopedRelayHops()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	relayMap := s.store.GetRepeaterRelayInfoMap(s.cfg.GetHealthThresholds().RelayActiveHours)
-
+	// No relay evidence at all (schema predates scope_name, or nothing's
+	// matched a hash region yet) — skip the nodes query entirely rather
+	// than scanning every node's position for nothing.
 	byRegion := make(map[string][][2]float64)
-	for _, n := range nodes {
-		if s.cfg.IsBlacklisted(n.PubKey) || s.cfg.IsNameHidden(n.Name) {
-			continue
+	if len(hopScopes) > 0 {
+		nodes, err := s.db.GetNodesWithPosition()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
 		}
-		info, ok := lookupRelayInfo(relayMap, n.PubKey)
-		if !ok {
-			continue
+		posByPubkey := make(map[string]NodeWithPosition, len(nodes))
+		for _, n := range nodes {
+			posByPubkey[strings.ToLower(n.PubKey)] = n
 		}
-		pt := [2]float64{n.Lat, n.Lon}
-		for _, scope := range info.TransportedScopes {
-			byRegion[scope] = append(byRegion[scope], pt)
+
+		for scope, pubkeys := range hopScopes {
+			for pk := range pubkeys {
+				pos, ok := posByPubkey[pk]
+				if !ok {
+					continue
+				}
+				if s.cfg.IsBlacklisted(pos.PubKey) || s.cfg.IsNameHidden(pos.Name) {
+					continue
+				}
+				byRegion[scope] = append(byRegion[scope], [2]float64{pos.Lat, pos.Lon})
+			}
 		}
 	}
 

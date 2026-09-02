@@ -129,7 +129,8 @@ type ScopeCoveragePoint [2]float64
 
 // ScopeCoverageRegion is one hash region's inferred coverage area — the
 // convex hull of every repeater/room's position that has actually
-// RELAYED traffic carrying this scope (RepeaterRelayInfo.TransportedScopes,
+// RELAYED traffic carrying this scope (DB.GetScopedRelayHops, computed
+// directly from transmissions.scope_name + observations.resolved_path —
 // not nodes.default_scope — see handleScopeCoverage's doc comment for why
 // that distinction matters). Hash regions carry no authoritative shape of
 // their own (internal/admindb's hash_regions table is just names), so

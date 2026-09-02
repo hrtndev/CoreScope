@@ -111,11 +111,105 @@ func TestGetNodesWithPosition(t *testing.T) {
 	}
 }
 
-// storeTx is a small helper for building a *StoreTx with the fields
-// handleScopeCoverage's relay-info path actually reads.
-func storeTx(id int, payloadType int, scopeName string) *StoreTx {
-	pt := payloadType
-	return &StoreTx{ID: id, FirstSeen: "2026-01-01T00:00:00Z", PayloadType: &pt, ScopeName: scopeName}
+// scopeCoverageSchema creates the subset of the transmissions/observations
+// schema GetScopedRelayHops queries against.
+func scopeCoverageSchema(t *testing.T, conn *sql.DB) {
+	t.Helper()
+	if _, err := conn.Exec(`CREATE TABLE transmissions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		payload_type INTEGER, scope_name TEXT
+	)`); err != nil {
+		t.Fatalf("create transmissions: %v", err)
+	}
+	if _, err := conn.Exec(`CREATE TABLE observations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		transmission_id INTEGER, resolved_path TEXT
+	)`); err != nil {
+		t.Fatalf("create observations: %v", err)
+	}
+}
+
+func TestGetScopedRelayHops(t *testing.T) {
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer conn.Close()
+	conn.SetMaxOpenConns(1)
+	db := &DB{conn: conn}
+	db.hasScopeName = true
+	db.hasResolvedPath = true
+	scopeCoverageSchema(t, conn)
+
+	insertTx := func(id, payloadType int, scope string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO transmissions (id, payload_type, scope_name) VALUES (?, ?, ?)`, id, payloadType, scope); err != nil {
+			t.Fatalf("insert tx %d: %v", id, err)
+		}
+	}
+	insertObs := func(txID int, resolvedPath string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO observations (transmission_id, resolved_path) VALUES (?, ?)`, txID, resolvedPath); err != nil {
+			t.Fatalf("insert obs for tx %d: %v", txID, err)
+		}
+	}
+
+	insertTx(1, 1, "#eu")
+	insertObs(1, `["pk-1","pk-2"]`)
+	insertTx(2, 1, "#eu")
+	insertObs(2, `["pk-2","pk-3"]`) // pk-2 repeated across transmissions: must dedup
+	insertTx(3, 1, "#usa")
+	insertObs(3, `["pk-4"]`)
+	insertTx(4, payloadTypeAdvert, "#japan") // ADVERT-only: must be excluded entirely
+	insertObs(4, `["pk-5"]`)
+	insertTx(5, 1, "") // empty scope: must be excluded
+	insertObs(5, `["pk-6"]`)
+	insertTx(6, 1, "#empty-path")
+	insertObs(6, ``) // NULL/empty resolved_path (unresolved hop-only path): contributes nothing
+
+	got, err := db.GetScopedRelayHops()
+	if err != nil {
+		t.Fatalf("GetScopedRelayHops: %v", err)
+	}
+	if want := map[string]bool{"pk-1": true, "pk-2": true, "pk-3": true}; !mapSetEqual(got["#eu"], want) {
+		t.Errorf("#eu = %v, want %v", got["#eu"], want)
+	}
+	if want := map[string]bool{"pk-4": true}; !mapSetEqual(got["#usa"], want) {
+		t.Errorf("#usa = %v, want %v", got["#usa"], want)
+	}
+	if _, ok := got["#japan"]; ok {
+		t.Errorf("#japan should be absent (ADVERT-only evidence): %v", got["#japan"])
+	}
+	if _, ok := got[""]; ok {
+		t.Error("empty scope_name should never produce a map entry")
+	}
+	if _, ok := got["#empty-path"]; ok {
+		t.Error("#empty-path should be absent (no resolved_path rows contributed)")
+	}
+}
+
+func TestGetScopedRelayHopsMissingSchema(t *testing.T) {
+	// Schemas predating scope_name/resolved_path: (nil, nil), not an error.
+	db := &DB{}
+	got, err := db.GetScopedRelayHops()
+	if err != nil {
+		t.Fatalf("GetScopedRelayHops: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got %v, want nil", got)
+	}
+}
+
+func mapSetEqual(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestHandleScopeCoverage(t *testing.T) {
@@ -126,13 +220,16 @@ func TestHandleScopeCoverage(t *testing.T) {
 	defer conn.Close()
 	conn.SetMaxOpenConns(1)
 	db := &DB{conn: conn}
+	db.hasScopeName = true
+	db.hasResolvedPath = true
 
 	if _, err := conn.Exec(`CREATE TABLE nodes (
 		public_key TEXT PRIMARY KEY, name TEXT,
 		lat REAL, lon REAL, foreign_advert INTEGER
 	)`); err != nil {
-		t.Fatalf("create table: %v", err)
+		t.Fatalf("create nodes: %v", err)
 	}
+	scopeCoverageSchema(t, conn)
 
 	nodes := []struct {
 		pk, name string
@@ -154,26 +251,36 @@ func TestHandleScopeCoverage(t *testing.T) {
 		}
 	}
 
-	const payloadTypeAdvertConst = 4 // must match payloadTypeAdvert in repeater_liveness.go
-	store := &PacketStore{
-		byPathHop: map[string][]*StoreTx{
-			// pk-1, pk-2, pk-3 relayed non-ADVERT traffic scoped #eu.
-			"pk-1": {storeTx(1, 1, "#eu")},
-			"pk-2": {storeTx(2, 1, "#eu")},
-			"pk-3": {storeTx(3, 1, "#eu")},
-			// pk-4 relayed non-ADVERT traffic scoped #usa.
-			"pk-4": {storeTx(4, 1, "#usa")},
-			// pk-blacklisted relayed #eu traffic too, but must be filtered by blacklist.
-			"pk-blacklisted": {storeTx(5, 1, "#eu")},
-			// pk-advert-only's only path-hop entry is its own ADVERT (payloadType 4) —
-			// TransportedScopes must NOT count adverts (self-declaration, not relay evidence).
-			"pk-advert-only": {storeTx(6, payloadTypeAdvertConst, "#japan")},
-		},
+	insertTx := func(id, payloadType int, scope string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO transmissions (id, payload_type, scope_name) VALUES (?, ?, ?)`, id, payloadType, scope); err != nil {
+			t.Fatalf("insert tx %d: %v", id, err)
+		}
 	}
+	insertObs := func(txID int, resolvedPath string) {
+		t.Helper()
+		if _, err := conn.Exec(`INSERT INTO observations (transmission_id, resolved_path) VALUES (?, ?)`, txID, resolvedPath); err != nil {
+			t.Fatalf("insert obs for tx %d: %v", txID, err)
+		}
+	}
+
+	// pk-1, pk-2, pk-3 relayed non-ADVERT traffic scoped #eu.
+	insertTx(1, 1, "#eu")
+	insertObs(1, `["pk-1","pk-2","pk-3"]`)
+	// pk-4 relayed non-ADVERT traffic scoped #usa.
+	insertTx(2, 1, "#usa")
+	insertObs(2, `["pk-4"]`)
+	// pk-blacklisted relayed #eu traffic too, but must be filtered by blacklist.
+	insertTx(3, 1, "#eu")
+	insertObs(3, `["pk-blacklisted"]`)
+	// pk-advert-only's only evidence is its own ADVERT (payload_type 4) —
+	// must NOT count as relay evidence (self-declaration, not relaying).
+	insertTx(4, payloadTypeAdvert, "#japan")
+	insertObs(4, `["pk-advert-only"]`)
 
 	cfg := &Config{}
 	cfg.SetNodeBlacklist([]string{"pk-blacklisted"})
-	srv := &Server{db: db, cfg: cfg, store: store}
+	srv := &Server{db: db, cfg: cfg}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/scope-coverage", nil)
 	w := httptest.NewRecorder()
@@ -188,7 +295,7 @@ func TestHandleScopeCoverage(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	// #japan must be absent: pk-advert-only's only evidence was its own
-	// ADVERT, which TransportedScopes deliberately excludes.
+	// ADVERT, which is excluded at the SQL layer.
 	if len(resp.Regions) != 2 {
 		t.Fatalf("got %d regions, want 2 (#eu, #usa — not #japan): %+v", len(resp.Regions), resp.Regions)
 	}
@@ -224,10 +331,16 @@ func TestHandleScopeCoverage(t *testing.T) {
 	}
 }
 
-func TestHandleScopeCoverageNoStore(t *testing.T) {
-	// No store wired (e.g. API-only/degraded mode) — must degrade to an
-	// empty response, not error or panic (mirrors enrichNodeList's guard).
-	srv := &Server{db: &DB{}, cfg: &Config{}, store: nil}
+func TestHandleScopeCoverageMissingSchema(t *testing.T) {
+	// Schema predates scope_name/resolved_path — must degrade to an empty
+	// response, not error or panic.
+	conn, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer conn.Close()
+	db := &DB{conn: conn}
+	srv := &Server{db: db, cfg: &Config{}}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/scope-coverage", nil)
 	w := httptest.NewRecorder()

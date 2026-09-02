@@ -2913,12 +2913,76 @@ func (db *DB) GetScopeStats(window string) (*ScopeStatsResponse, error) {
 	return resp, nil
 }
 
+// GetScopedRelayHops returns, for each MeshCore hash region name
+// (transmissions.scope_name), the set of distinct relay-hop pubkeys seen
+// on non-ADVERT transmissions matching that scope — computed directly
+// from transmissions+observations, the same persisted data
+// RepeaterRelayInfo.TransportedScopes derives from, but without going
+// through the in-memory PacketStore/byPathHop index. This means
+// /api/scope-coverage works even when no in-memory store is wired, and
+// isn't bounded by the store's retention/eviction window — the whole
+// point of building this against the DB instead.
+//
+// Not time-windowed, matching TransportedScopes' original "ever" semantic
+// (there is deliberately no first_seen cutoff here) — cheap regardless of
+// how large transmissions/observations grow, because idx_tx_scope_name is
+// a partial index covering only the scoped-row subset (a tiny fraction of
+// total traffic in practice), and the observations join uses
+// idx_observations_transmission_id.
+//
+// ADVERT packets (payload_type = 4) are excluded — see
+// handleScopeCoverage's doc comment for why self-broadcast scope
+// declarations don't count as relay evidence. Returns (nil, nil) on
+// schemas predating scope_name/resolved_path, not an error — there is
+// nothing to report, not a failure. Read-only — safe on the server's
+// mode=ro handle.
+func (db *DB) GetScopedRelayHops() (map[string]map[string]bool, error) {
+	if !db.hasScopeName || !db.hasResolvedPath {
+		return nil, nil
+	}
+	rows, err := db.conn.Query(`
+		SELECT t.scope_name, o.resolved_path
+		FROM transmissions t
+		JOIN observations o ON o.transmission_id = t.id
+		WHERE t.scope_name IS NOT NULL AND t.scope_name != ''
+		  AND (t.payload_type IS NULL OR t.payload_type != ?)
+		  AND o.resolved_path IS NOT NULL AND o.resolved_path != ''
+	`, payloadTypeAdvert)
+	if err != nil {
+		return nil, fmt.Errorf("query scoped relay hops: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]map[string]bool)
+	for rows.Next() {
+		var scope, rp string
+		if err := rows.Scan(&scope, &rp); err != nil {
+			return nil, fmt.Errorf("scan scoped relay hop: %w", err)
+		}
+		hops := unmarshalResolvedPath(rp)
+		if len(hops) == 0 {
+			continue
+		}
+		set := out[scope]
+		if set == nil {
+			set = make(map[string]bool)
+			out[scope] = set
+		}
+		for _, h := range hops {
+			if h == nil || *h == "" {
+				continue
+			}
+			set[strings.ToLower(*h)] = true
+		}
+	}
+	return out, rows.Err()
+}
+
 // NodeWithPosition is a candidate row for hash-region coverage: a node
 // with a GPS fix. Includes identity fields (PubKey, Name) so the caller
 // — which has access to *Config, unlike *DB — can apply blacklist/
-// hidden-name filtering, and looks up region membership separately via
-// the in-memory store's TransportedScopes (see scope_coverage.go; region
-// membership isn't a DB column, it's derived from byPathHop).
+// hidden-name filtering. Region membership is looked up separately via
+// GetScopedRelayHops above (not a column on this table).
 type NodeWithPosition struct {
 	PubKey string
 	Name   string
