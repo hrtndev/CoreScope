@@ -1425,6 +1425,15 @@ body.scroll-locked { overflow: hidden; }
   background: var(--transport-badge-bg, #f59e0b20); color: var(--transport-badge-fg, #d97706);
   letter-spacing: .5px; vertical-align: middle;
 }
+/* Flags a recently-shipped control so it's easier to notice in a sidebar
+ * full of existing checkboxes — not tied to any single feature, reuse for
+ * whatever's newest. */
+.badge-new {
+  display: inline-block; padding: 1px 5px; border-radius: 4px;
+  font-size: 9px; font-weight: 700; letter-spacing: .5px;
+  background: var(--accent-strong); color: #fff;
+  vertical-align: middle;
+}
 .badge-obs {
   display: inline-block; padding: 1px 6px; border-radius: 10px;
   font-size: 10px; font-weight: 600;

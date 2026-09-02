@@ -46,11 +46,12 @@ func routeDescriptions() map[string]routeMeta {
 		"GET /api/config/geo-filter":   {Summary: "Get geo-filter configuration", Tag: "config"},
 
 		// Admin / system
-		"GET /api/health":      {Summary: "Health check", Description: "Returns server health, uptime, and memory stats.", Tag: "admin"},
-		"GET /api/stats":       {Summary: "Network statistics", Description: "Returns aggregate stats (node counts, packet counts, observer counts). Cached for 10s.", Tag: "admin"},
-		"GET /api/perf":        {Summary: "Performance statistics", Description: "Returns per-endpoint request timing and slow query log.", Tag: "admin"},
-		"GET /api/mqtt/status": {Summary: "MQTT source status", Description: "Returns per-MQTT-source connection state and counters (lastConnectUnix, lastPacketUnix, packetsTotal, etc.). Broker URL passwords are masked. Sourced from the ingestor stats file; empty list when unavailable. (#1043)", Tag: "admin"},
-		"POST /api/perf/reset": {Summary: "Reset performance stats", Tag: "admin", Auth: true},
+		"GET /api/health":         {Summary: "Health check", Description: "Returns server health, uptime, and memory stats.", Tag: "admin"},
+		"GET /api/stats":          {Summary: "Network statistics", Description: "Returns aggregate stats (node counts, packet counts, observer counts). Cached for 10s.", Tag: "admin"},
+		"GET /api/perf":           {Summary: "Performance statistics", Description: "Returns per-endpoint request timing and slow query log.", Tag: "admin"},
+		"GET /api/mqtt/status":    {Summary: "MQTT source status", Description: "Returns per-MQTT-source connection state and counters (lastConnectUnix, lastPacketUnix, packetsTotal, etc.). Broker URL passwords are masked. Sourced from the ingestor stats file; empty list when unavailable. (#1043)", Tag: "admin"},
+		"GET /api/scope-coverage": {Summary: "Hash-region coverage areas", Description: "Groups repeaters/rooms by the MeshCore hash regions they've actually relayed traffic for — computed directly from transmissions.scope_name + observations.resolved_path (non-ADVERT packets only) — and returns a convex hull of each region's member node positions. An inferred coverage area, not an authoritative boundary (hash regions carry no shape of their own). A node's own self-broadcast scope (default_scope) is NOT used — only relay evidence. Excludes blacklisted/hidden/foreign-flagged nodes. Cached 30s.", Tag: "admin"},
+		"POST /api/perf/reset":    {Summary: "Reset performance stats", Tag: "admin", Auth: true},
 		// "POST /api/admin/prune" removed in #1283 (ingestor owns prune).
 		"GET /api/debug/affinity": {Summary: "Debug neighbor affinity scores", Tag: "admin", Auth: true},
 		"GET /api/backup":         {Summary: "Download SQLite backup", Description: "Streams a consistent SQLite snapshot of the analyzer DB (VACUUM INTO). Response is application/octet-stream with attachment filename corescope-backup-<unix>.db.", Tag: "admin", Auth: true},

@@ -78,6 +78,14 @@ type Server struct {
 	scopeStatsCache    map[string]*ScopeStatsResponse
 	scopeStatsCachedAt map[string]time.Time
 
+	// Cached /api/scope-coverage response — recomputed at most once every
+	// 30s (see scope_coverage.go). Single global cache, no per-window
+	// variants like scope-stats above: coverage hulls are a current
+	// snapshot of node positions, not a historical time range.
+	scopeCoverageMu       sync.Mutex
+	scopeCoverageCache    *ScopeCoverageResponse
+	scopeCoverageCachedAt time.Time
+
 	// Router reference for OpenAPI spec generation
 	router *mux.Router
 
@@ -252,6 +260,10 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/health", s.handleHealth).Methods("GET")
 	r.HandleFunc("/api/stats", s.handleStats).Methods("GET")
 	r.HandleFunc("/api/scope-stats", s.handleScopeStats).Methods("GET")
+	// Area-like hash-region coverage (convex hulls of matched node
+	// positions) — see scope_coverage.go for why this can't be an
+	// authoritative shape, only an inferred one.
+	r.HandleFunc("/api/scope-coverage", s.handleScopeCoverage).Methods("GET")
 	r.HandleFunc("/api/perf", s.handlePerf).Methods("GET")
 	r.HandleFunc("/api/perf/io", s.handlePerfIO).Methods("GET")
 	r.HandleFunc("/api/perf/sqlite", s.handlePerfSqlite).Methods("GET")
