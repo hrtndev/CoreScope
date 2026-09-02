@@ -775,6 +775,46 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   color: var(--accent) !important;
 }
 
+/* Hash Region Coverage toggle — a standalone labeled pill (not another
+ * checkbox in the settings accordion) so a beta feature is actually
+ * noticeable. Deliberately styled unlike the plain square icon buttons
+ * above (.live-leaflet-toggle) so it reads as its own thing at a glance. */
+.live-scope-coverage-control a {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 32px !important;
+  line-height: 32px !important;
+  padding: 0 12px !important;
+  width: auto !important;
+  border-radius: 16px !important;
+  background: var(--surface-1) !important;
+  color: var(--text) !important;
+  border: 1.5px solid var(--accent-strong) !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  text-decoration: none !important;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.live-scope-coverage-control a .ph-icon { width: 15px; height: 15px; flex-shrink: 0; }
+.live-scope-coverage-control a:hover {
+  background: var(--accent-bg, color-mix(in srgb, var(--accent-strong) 15%, transparent)) !important;
+}
+.live-scope-coverage-control a.active {
+  background: var(--accent-strong) !important;
+  color: #fff !important;
+}
+.live-scope-coverage-control a.active .badge-new {
+  background: #fff;
+  color: var(--accent-strong);
+}
+@media (max-width: 640px) {
+  /* Icon + Beta badge only — "Hash Regions" text would push this control
+   * wider than the map controls are willing to spare on phones. */
+  .live-scope-coverage-control a span:not(.badge-new) { display: none; }
+}
+
 
 
 

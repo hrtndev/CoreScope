@@ -1153,7 +1153,6 @@
             <label><input type="checkbox" id="liveMultibyteToggle" aria-describedby="multibyteDesc"> Multibyte only</label>
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
-            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Hash region coverage <span class="badge badge-new">Beta</span></label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1504,6 +1503,49 @@
       }
     });
     map.addControl(new LiveSettingsControl());
+
+    // Standalone Hash Region Coverage toggle — deliberately its own
+    // labeled control (not another checkbox buried in the settings
+    // accordion) so people notice a beta feature exists at all. Lives at
+    // 'topleft', the only map corner not already claimed by the icon
+    // stack (topright) or the draggable feed/legend panels (bottom).
+    // Hidden until scope-coverage.js's load() confirms the server
+    // actually has region data (see labelId below) — same "don't show a
+    // dead feature" behavior the map.js sidebar checkbox has.
+    const LiveScopeCoverageControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function() {
+        const container = L.DomUtil.create('div', 'live-scope-coverage-control');
+        container.id = 'liveScopeCoverageLabel';
+        container.style.display = 'none';
+
+        const hiddenCb = document.createElement('input');
+        hiddenCb.type = 'checkbox';
+        hiddenCb.id = 'liveScopeCoverageToggle';
+        hiddenCb.style.display = 'none';
+        hiddenCb.checked = localStorage.getItem('meshcore-live-scope-coverage') === 'true';
+        container.appendChild(hiddenCb);
+
+        const btn = L.DomUtil.create('a', hiddenCb.checked ? 'active' : '', container);
+        btn.href = 'javascript:void(0)';
+        btn.id = 'liveScopeCoverageBtn';
+        btn.title = 'Show which repeaters have relayed traffic for each MeshCore hash region';
+        btn.setAttribute('role', 'button');
+        btn.setAttribute('aria-pressed', hiddenCb.checked ? 'true' : 'false');
+        btn.innerHTML = '<svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-map-trifold"/></svg>' +
+          '<span>Hash Regions</span><span class="badge badge-new">Beta</span>';
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, 'click', function () {
+          hiddenCb.checked = !hiddenCb.checked;
+          hiddenCb.dispatchEvent(new Event('change'));
+          btn.classList.toggle('active', hiddenCb.checked);
+          btn.setAttribute('aria-pressed', hiddenCb.checked ? 'true' : 'false');
+        });
+
+        return container;
+      }
+    });
+    map.addControl(new LiveScopeCoverageControl());
 
 
 
