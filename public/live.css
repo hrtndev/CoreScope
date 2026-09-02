@@ -791,7 +791,7 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   align-items: center;
   gap: 6px;
   height: 32px;
-  padding: 0 4px 0 12px;
+  padding: 0 12px;
   border-radius: 16px;
   overflow: hidden;
   background: var(--surface-1);
