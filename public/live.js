@@ -407,6 +407,40 @@
     };
   }
 
+  // Publishes #liveHeader's measured height as --live-header-height on
+  // .live-page, so the standalone Hash Region Coverage button (CSS:
+  // .live-scope-coverage-control) can position itself just below the
+  // MESH LIVE panel no matter how tall that panel currently is — title
+  // row only, or title+stats+expanded-settings-toggles. Same pattern as
+  // initVCRHeightTracker above, for the same reason (a fixed pixel
+  // offset would either overlap the panel or leave a growing gap).
+  var _liveHeaderHeightCleanup = null;
+  function initLiveHeaderHeightTracker() {
+    if (_liveHeaderHeightCleanup) { try { _liveHeaderHeightCleanup(); } catch (_) {} _liveHeaderHeightCleanup = null; }
+    var header = document.getElementById('liveHeader');
+    var page = document.querySelector('.live-page');
+    if (!header || !page) return;
+    function publish() {
+      var h = Math.ceil(header.getBoundingClientRect().height) || 27;
+      page.style.setProperty('--live-header-height', h + 'px');
+    }
+    publish();
+    var ro = null;
+    if (typeof ResizeObserver === 'function') {
+      try { ro = new ResizeObserver(publish); ro.observe(header); } catch (_) { ro = null; }
+    }
+    window.addEventListener('resize', publish);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', publish);
+    }
+    _liveHeaderHeightCleanup = function() {
+      if (ro) { try { ro.disconnect(); } catch (_) {} ro = null; }
+      window.removeEventListener('resize', publish);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', publish);
+      }
+    };
+  }
   function vcrSetMode(mode) {
     VCR.mode = mode;
     if (mode !== 'LIVE' && !VCR.frozenNow) VCR.frozenNow = Date.now();
@@ -1174,6 +1208,14 @@
           </div>
         </div>
         </div><!-- /#liveHeader -->
+        <div class="live-overlay live-scope-coverage-control" id="liveScopeCoverageLabel" style="display:none">
+          <input type="checkbox" id="liveScopeCoverageToggle" style="display:none">
+          <a href="javascript:void(0)" id="liveScopeCoverageBtn" role="button" aria-pressed="false"
+             title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary">
+            <svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-map-trifold"/></svg>
+            <span>Hash Regions</span><span class="badge badge-new">Beta</span>
+          </a>
+        </div>
         <div class="live-overlay live-feed" id="liveFeed">
           <div class="panel-header">
             <button class="panel-corner-btn" data-panel="liveFeed" title="Move panel to next corner" aria-label="Move panel to next corner">◫</button>
@@ -1505,49 +1547,31 @@
     map.addControl(new LiveSettingsControl());
 
     // Standalone Hash Region Coverage toggle — deliberately its own
-    // labeled control (not another checkbox buried in the settings
-    // accordion) so people notice a beta feature exists at all. Lives at
-    // 'topleft', the only map corner not already claimed by the icon
-    // stack (topright) or the draggable feed/legend panels (bottom).
-    // Hidden until scope-coverage.js's load() confirms the server
-    // actually has region data (see labelId below) — same "don't show a
-    // dead feature" behavior the map.js sidebar checkbox has.
-    const LiveScopeCoverageControl = L.Control.extend({
-      options: { position: 'topleft' },
-      onAdd: function() {
-        const container = L.DomUtil.create('div', 'live-scope-coverage-control');
-        container.id = 'liveScopeCoverageLabel';
-        container.style.display = 'none';
-
-        const hiddenCb = document.createElement('input');
-        hiddenCb.type = 'checkbox';
-        hiddenCb.id = 'liveScopeCoverageToggle';
-        hiddenCb.style.display = 'none';
-        hiddenCb.checked = localStorage.getItem('meshcore-live-scope-coverage') === 'true';
-        container.appendChild(hiddenCb);
-
-        const btn = L.DomUtil.create('a', hiddenCb.checked ? 'active' : '', container);
-        btn.href = 'javascript:void(0)';
-        btn.id = 'liveScopeCoverageBtn';
-        btn.title = 'Show which repeaters have relayed traffic for each MeshCore hash region';
-        btn.setAttribute('role', 'button');
-        btn.setAttribute('aria-pressed', hiddenCb.checked ? 'true' : 'false');
-        btn.innerHTML = '<svg class="ph-icon" aria-hidden="true"><use href="/icons/phosphor-sprite.svg#ph-map-trifold"/></svg>' +
-          '<span>Hash Regions</span><span class="badge badge-new">Beta</span>';
-        L.DomEvent.disableClickPropagation(btn);
-        L.DomEvent.on(btn, 'click', function () {
-          hiddenCb.checked = !hiddenCb.checked;
-          hiddenCb.dispatchEvent(new Event('change'));
-          btn.classList.toggle('active', hiddenCb.checked);
-          btn.setAttribute('aria-pressed', hiddenCb.checked ? 'true' : 'false');
-        });
-
-        return container;
-      }
-    });
-    map.addControl(new LiveScopeCoverageControl());
-
-
+    // labeled button (not another checkbox buried in the settings
+    // accordion) so people notice a beta feature exists at all. Lives
+    // just below the MESH LIVE panel (#liveHeader) — NOT a Leaflet corner
+    // control, because it needs to track that panel's height (title row
+    // only vs. title+stats+expanded-toggles) to always sit right under
+    // it rather than overlapping. initLiveHeaderHeightTracker (defined
+    // next to initVCRHeightTracker above) handles that via
+    // ResizeObserver. Hidden until scope-coverage.js's load()
+    // confirms the server actually has region data — see the markup's
+    // #liveScopeCoverageLabel, same "don't show a dead feature" behavior
+    // the map.js sidebar checkbox has.
+    const scopeCoverageBtn = document.getElementById('liveScopeCoverageBtn');
+    const scopeCoverageCb = document.getElementById('liveScopeCoverageToggle');
+    if (scopeCoverageBtn && scopeCoverageCb) {
+      scopeCoverageCb.checked = localStorage.getItem('meshcore-live-scope-coverage') === 'true';
+      scopeCoverageBtn.classList.toggle('active', scopeCoverageCb.checked);
+      scopeCoverageBtn.setAttribute('aria-pressed', scopeCoverageCb.checked ? 'true' : 'false');
+      scopeCoverageBtn.addEventListener('click', function () {
+        scopeCoverageCb.checked = !scopeCoverageCb.checked;
+        scopeCoverageCb.dispatchEvent(new Event('change'));
+        scopeCoverageBtn.classList.toggle('active', scopeCoverageCb.checked);
+        scopeCoverageBtn.setAttribute('aria-pressed', scopeCoverageCb.checked ? 'true' : 'false');
+      });
+    }
+    initLiveHeaderHeightTracker();
 
     // Swap tiles when theme changes
     const _themeObs = new MutationObserver(function () {
@@ -4580,6 +4604,7 @@
       if (window.visualViewport) window.visualViewport.removeEventListener('resize', _onResize);
     }
     if (_vcrHeightCleanup) { try { _vcrHeightCleanup(); } catch (_) {} _vcrHeightCleanup = null; }
+    if (_liveHeaderHeightCleanup) { try { _liveHeaderHeightCleanup(); } catch (_) {} _liveHeaderHeightCleanup = null; }
     // Restore #app height to CSS default
     const appEl = document.getElementById('app');
     if (appEl) appEl.style.height = '';

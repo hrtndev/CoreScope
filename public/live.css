@@ -775,35 +775,43 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   color: var(--accent) !important;
 }
 
-/* Hash Region Coverage toggle — a standalone labeled pill (not another
- * checkbox in the settings accordion) so a beta feature is actually
- * noticeable. Deliberately styled unlike the plain square icon buttons
- * above (.live-leaflet-toggle) so it reads as its own thing at a glance. */
+/* Hash Region Coverage toggle — a standalone labeled pill positioned
+ * just below the MESH LIVE panel (#liveHeader), not another checkbox
+ * buried in the settings accordion, so a beta feature is actually
+ * noticeable. --live-header-height is published by
+ * initLiveHeaderHeightTracker (live.js) via ResizeObserver on
+ * #liveHeader, so this tracks the panel's real height — title row only,
+ * or title+stats+expanded-settings-toggles — instead of a fixed offset
+ * that would either overlap it or leave a growing gap. */
+.live-scope-coverage-control {
+  top: calc(64px + var(--live-header-height, 27px) + 8px);
+  left: 12px;
+  flex-direction: row;
+}
 .live-scope-coverage-control a {
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px !important;
-  line-height: 32px !important;
-  padding: 0 12px !important;
-  width: auto !important;
-  border-radius: 16px !important;
-  background: var(--surface-1) !important;
-  color: var(--text) !important;
-  border: 1.5px solid var(--accent-strong) !important;
-  font-size: 12px !important;
+  height: 32px;
+  line-height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1.5px solid var(--accent-strong);
+  font-size: 12px;
   font-weight: 600;
-  text-decoration: none !important;
+  text-decoration: none;
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
 }
 .live-scope-coverage-control a .ph-icon { width: 15px; height: 15px; flex-shrink: 0; }
 .live-scope-coverage-control a:hover {
-  background: var(--accent-bg, color-mix(in srgb, var(--accent-strong) 15%, transparent)) !important;
+  background: var(--accent-bg, color-mix(in srgb, var(--accent-strong) 15%, transparent));
 }
 .live-scope-coverage-control a.active {
-  background: var(--accent-strong) !important;
-  color: #fff !important;
+  background: var(--accent-strong);
+  color: #fff;
 }
 .live-scope-coverage-control a.active .badge-new {
   background: #fff;
