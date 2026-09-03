@@ -38,8 +38,8 @@ func routeDescriptions() map[string]routeMeta {
 		// Config
 		"GET /api/config/cache":        {Summary: "Get cache configuration", Tag: "config"},
 		"GET /api/config/client":       {Summary: "Get client configuration", Tag: "config"},
-		"GET /api/config/regions":      {Summary: "Get configured regions", Tag: "config"},
-		"GET /api/config/regions/list": {Summary: "Get region names as a JSON string array", Description: "Flattened, deduplicated, alphabetically sorted list of region display names. Intended for simple integrations (e.g. a Discord bot) that just need to know what regions currently exist.", Tag: "config"},
+		"GET /api/config/regions":      {Summary: "Get configured IATA regions", Tag: "config"},
+		"GET /api/config/regions/list": {Summary: "Get IATA region names as a JSON string array", Description: "Flattened, deduplicated, alphabetically sorted list of IATA region display names. Intended for simple integrations (e.g. a Discord bot) that just need to know what IATA regions currently exist.", Tag: "config"},
 		"GET /api/config/hash-regions": {Summary: "Get hashRegions as a JSON string array", Description: "Public, unauthenticated counterpart to GET /api/admin/hash-regions. Returns the configured MeshCore transport-scope names (e.g. \"#eu\") as a plain JSON array, alphabetically sorted.", Tag: "config"},
 		"GET /api/config/theme":        {Summary: "Get theme configuration", Description: "Returns color maps, CSS variables, and theme defaults.", Tag: "config"},
 		"GET /api/config/map":          {Summary: "Get map configuration", Tag: "config"},
@@ -51,6 +51,7 @@ func routeDescriptions() map[string]routeMeta {
 		"GET /api/perf":           {Summary: "Performance statistics", Description: "Returns per-endpoint request timing and slow query log.", Tag: "admin"},
 		"GET /api/mqtt/status":    {Summary: "MQTT source status", Description: "Returns per-MQTT-source connection state and counters (lastConnectUnix, lastPacketUnix, packetsTotal, etc.). Broker URL passwords are masked. Sourced from the ingestor stats file; empty list when unavailable. (#1043)", Tag: "admin"},
 		"GET /api/scope-coverage": {Summary: "Hash-region coverage areas", Description: "Groups repeaters/rooms by the MeshCore hash regions they've actually relayed traffic for — computed directly from transmissions.scope_name + observations.resolved_path (non-ADVERT packets only) — and returns a convex hull of each region's member node positions. An inferred coverage area, not an authoritative boundary (hash regions carry no shape of their own). A node's own self-broadcast scope (default_scope) is NOT used — only relay evidence. Excludes blacklisted/hidden/foreign-flagged nodes. Cached 30s.", Tag: "admin"},
+		"GET /api/scope-coverage/nodes": {Summary: "Hash-region node membership", Description: "Sibling to /api/scope-coverage: instead of each region's aggregate coverage shape, returns for every node with a GPS fix the list of hash region(s) it has actually relayed traffic for. A node sitting on a region boundary can belong to more than one region. Same relay-evidence semantics and blacklist/hidden-name filtering as /api/scope-coverage. Cached 30s.", Tag: "admin"},
 		"POST /api/perf/reset":    {Summary: "Reset performance stats", Tag: "admin", Auth: true},
 		// "POST /api/admin/prune" removed in #1283 (ingestor owns prune).
 		"GET /api/debug/affinity": {Summary: "Debug neighbor affinity scores", Tag: "admin", Auth: true},
@@ -75,8 +76,8 @@ func routeDescriptions() map[string]routeMeta {
 		// Region name management (admin panel). Unlike infrastructure
 		// flags above, admin.db is owned read-write directly by cmd/server,
 		// so these write synchronously — no ingestor queue/poll needed.
-		"GET /api/admin/regions": {Summary: "Get regions for editing", Description: "Returns the configured code -> display name map plus every IATA code observed in the DB, so the admin UI can surface codes seen on the network that don't have a friendly name yet.", Tag: "admin", Auth: true},
-		"PUT /api/admin/regions": {Summary: "Replace the region name map", Description: "Full-replace: the request body's regions map becomes the new content of admin.db's regions table.", Tag: "admin", Auth: true},
+		"GET /api/admin/regions": {Summary: "Get IATA regions for editing", Description: "Returns the configured code -> display name map plus every IATA code observed in the DB, so the admin UI can surface codes seen on the network that don't have a friendly name yet.", Tag: "admin", Auth: true},
+		"PUT /api/admin/regions": {Summary: "Replace the IATA region name map", Description: "Full-replace: the request body's IATA regions map becomes the new content of admin.db's regions table.", Tag: "admin", Auth: true},
 
 		// Hash-region management: MeshCore transport-scope names (e.g.
 		// "#eu") the ingestor hashes to derive HMAC scope-matching keys.

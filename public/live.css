@@ -775,9 +775,6 @@ body.live-fullscreen #liveFullscreenToggle:hover,
   color: var(--accent) !important;
 }
 
-
-
-
 /* Feed item hover */
 .live-feed-item:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
 

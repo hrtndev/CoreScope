@@ -74,6 +74,7 @@
   // hamburger is hidden at that breakpoint -- see bottom-nav.css).
   var MORE_ROUTES = [
     { route: 'nodes',     hash: '#/nodes',     label: 'Nodes',     ph: 'monitor' },
+    { route: 'regions',   hash: '#/regions',   label: 'Regions',   ph: 'globe' },
     { route: 'infrastructure', hash: '#/infrastructure', label: 'Infra', ph: 'cell-signal-high' },
     { route: 'tools',     hash: '#/tools',     label: 'Tools',     ph: 'wrench' },
     { route: 'observers', hash: '#/observers', label: 'Observers', ph: 'eye' },

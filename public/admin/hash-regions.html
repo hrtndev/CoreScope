@@ -6,7 +6,7 @@
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Hash Regions — CoreScope Admin</title>
+  <title>Regions — CoreScope Admin</title>
   <script>
     (function () {
       try {
@@ -28,8 +28,8 @@
       <div class="nav-links">
         <a href="/admin/" class="nav-link">Admins</a>
         <a href="/admin/infrastructure" class="nav-link">Infrastructure Nodes</a>
-        <a href="/admin/regions" class="nav-link">Regions</a>
-        <a href="/admin/hash-regions" class="nav-link active">Hash Regions</a>
+        <a href="/admin/regions" class="nav-link">IATA Regions</a>
+        <a href="/admin/hash-regions" class="nav-link active">Regions</a>
       </div>
     </div>
     <div class="nav-right">
@@ -48,8 +48,8 @@
 
   <main class="admin-page">
     <div class="admin-header">
-      <h1>Hash Regions</h1>
-      <p>MeshCore transport-scope names (e.g. <code>#eu</code>) the ingestor hashes with SHA-256 to derive HMAC keys for scope-matching on transport-route packets. Not related to the IATA display names on the <a href="/admin/regions">Regions</a> page.</p>
+      <h1>Regions</h1>
+      <p>MeshCore transport-scope names (e.g. <code>#eu</code>) the ingestor hashes with SHA-256 to derive HMAC keys for scope-matching on transport-route packets. Not related to the IATA display names on the <a href="/admin/regions">IATA Regions</a> page.</p>
     </div>
 
     <div class="admin-section">
@@ -57,7 +57,7 @@
         Changes apply automatically — the ingestor re-checks this list roughly every 15 seconds and does not need to be restarted.
       </div>
 
-      <h2>Configured Hash Regions</h2>
+      <h2>Configured Regions</h2>
       <div class="form-error" id="regions-error"></div>
       <table class="data-table">
         <colgroup><col style="width:75%"><col style="width:25%"></colgroup>

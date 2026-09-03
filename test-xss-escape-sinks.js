@@ -361,7 +361,7 @@ test('TRACE-1: traces.js urlHash interpolation escapes URL-fragment payload', ()
 // ----- OBS-1: observer-detail.js obs.* fields → renderDetail innerHTML -----
 function extractObsStatValue(field) {
   const src = fs.readFileSync('public/observer-detail.js', 'utf8');
-  const labelMap = { model: 'Model', firmware: 'Firmware', client_version: 'Client', iata: 'Region' };
+  const labelMap = { model: 'Model', firmware: 'Firmware', client_version: 'Client', iata: 'IATA Region' };
   const label = labelMap[field];
   const re = new RegExp(
     '<div class="stat-label">' + label + '<\\/div>[\\s\\S]{0,250}?' +

@@ -88,18 +88,18 @@
 
   /** Build summary label for dropdown trigger */
   function dropdownLabel(codes) {
-    if (!_selected) return 'All Regions';
+    if (!_selected) return 'All IATA Regions';
     var sel = Array.from(_selected);
-    if (sel.length === 0) return 'All Regions';
+    if (sel.length === 0) return 'All IATA Regions';
     if (sel.length <= 2) return sel.join(', ');
-    return sel.length + ' Regions';
+    return sel.length + ' IATA Regions';
   }
 
   /** Render pill bar mode (≤4 regions) */
   function renderPills(container, codes) {
     var allSelected = !_selected;
-    var html = '<div class="region-filter-bar" role="group" aria-label="Region filter">';
-    html += '<span class="region-filter-label" id="region-filter-label">Region:</span>';
+    var html = '<div class="region-filter-bar" role="group" aria-label="IATA region filter">';
+    html += '<span class="region-filter-label" id="region-filter-label">IATA:</span>';
     html += '<button class="region-pill' + (allSelected ? ' region-pill-active' : '') +
       '" data-region="__all__" role="checkbox" aria-checked="' + allSelected + '">All</button>';
     codes.forEach(function (code) {
@@ -121,10 +121,10 @@
   /** Render dropdown mode (>4 regions) */
   function renderDropdown(container, codes) {
     var allSelected = !_selected;
-    var html = '<div class="region-dropdown-wrap" role="group" aria-label="Region filter">';
+    var html = '<div class="region-dropdown-wrap" role="group" aria-label="IATA region filter">';
     html += '<button class="region-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">' +
       dropdownLabel(codes) + ' ▾</button>';
-    html += '<div class="region-dropdown-menu" role="listbox" aria-label="Select regions" hidden>';
+    html += '<div class="region-dropdown-menu" role="listbox" aria-label="Select IATA regions" hidden>';
     html += '<label class="region-dropdown-item"><input type="checkbox" data-region="__all__"' +
       (allSelected ? ' checked' : '') + '> <strong>All</strong></label>';
     codes.forEach(function (code) {

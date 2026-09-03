@@ -150,6 +150,20 @@ type ScopeCoverageResponse struct {
 	Regions []ScopeCoverageRegion `json:"regions"`
 }
 
+// ScopeCoverageNode is one node's hash-region relay membership — sibling
+// to ScopeCoverageRegion, answering the inverse question per-node instead
+// of per-region. A node sitting on a region boundary can — and often
+// does — relay traffic for more than one region, hence Regions being a
+// slice rather than a single name.
+type ScopeCoverageNode struct {
+	PubKey  string   `json:"pubkey"`
+	Regions []string `json:"regions"`
+}
+
+type ScopeCoverageNodesResponse struct {
+	Nodes []ScopeCoverageNode `json:"nodes"`
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 
 type MemoryStats struct {

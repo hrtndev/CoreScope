@@ -18,6 +18,7 @@
   function statusGreen() { return cssVar('--status-green') || '#22c55e'; }
 
   let map, ws, nodesLayer, pathsLayer, animLayer, heatLayer, geoFilterLayer, clickablePathsLayer;
+  let scopeCoverageOverlay = null; // see scope-coverage.js — createScopeCoverageOverlay(map, opts)
   // New animation canvas
   let animCanvas, animCtx;
   let _dprMedia = null;
@@ -1152,6 +1153,7 @@
             <label><input type="checkbox" id="liveMultibyteToggle" aria-describedby="multibyteDesc"> Multibyte only</label>
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
+            <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Region coverage <span class="badge badge-new">Beta</span></label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1503,8 +1505,6 @@
     });
     map.addControl(new LiveSettingsControl());
 
-
-
     // Swap tiles when theme changes
     const _themeObs = new MutationObserver(function () {
       const dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
@@ -1643,7 +1643,7 @@
         if (!window.RegionShowAll) return;
         var wrap = document.createElement('label');
         wrap.className = 'live-show-all-region-nodes';
-        wrap.title = 'When a region is selected, show every node on the map (legacy behavior). Off = hide non-region nodes.';
+        wrap.title = 'When an IATA region is selected, show every node on the map (legacy behavior). Off = hide non-IATA-region nodes.';
         var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.id = 'liveShowAllRegionNodes';
@@ -1855,6 +1855,13 @@
         }
       } catch (e) { /* no geo filter configured */ }
     })();
+
+    // Hash-region coverage overlay — see scope-coverage.js
+    scopeCoverageOverlay = createScopeCoverageOverlay(map, {
+      checkboxId: 'liveScopeCoverageToggle', labelId: 'liveScopeCoverageLabel',
+      storageKey: 'meshcore-live-scope-coverage'
+    });
+    scopeCoverageOverlay.load();
 
     const matrixToggle = document.getElementById('liveMatrixToggle');
     matrixToggle.checked = matrixMode;
@@ -2568,7 +2575,7 @@
 
       if (observers.length) {
         const regions = [...new Set(observers.map(o => o.iata).filter(Boolean))];
-        html += `<h4 style="font-size:12px;margin:12px 0 6px;color:var(--text-muted);">Heard By${regions.length ? ' — Regions: ' + regions.join(', ') : ''}</h4>
+        html += `<h4 style="font-size:12px;margin:12px 0 6px;color:var(--text-muted);">Heard By${regions.length ? ' — IATA Regions: ' + regions.join(', ') : ''}</h4>
           <div style="font-size:11px;">` +
           observers.map(o => `<div style="padding:2px 0;"><a href="#/observers/${encodeURIComponent(o.observer_id)}" style="color:var(--link-color);text-decoration:none;">${escapeHtml(o.observer_name || o.observer_id.slice(0, 12))}${o.iata ? ' (' + escapeHtml(o.iata) + ')' : ''}</a> — ${o.packetCount || o.count || 0} pkts</div>`).join('') +
           '</div>';
@@ -4521,6 +4528,7 @@
       RegionFilter.offChange(regionFilterChangeHandler);
       regionFilterChangeHandler = null;
     }
+    if (scopeCoverageOverlay) { scopeCoverageOverlay.destroy(); scopeCoverageOverlay = null; }
     if (map) { map.remove(); map = null; }
     if (_onResize) {
       window.removeEventListener('resize', _onResize);
@@ -4584,6 +4592,7 @@
       _themeRefreshHandler = () => {
         rebuildFeedList();
         if (activeNodeDetailKey) showNodeDetail(activeNodeDetailKey);
+        if (scopeCoverageOverlay) scopeCoverageOverlay.refreshTheme();
       };
       window.addEventListener('theme-refresh', _themeRefreshHandler);
       var result = init(app, routeParam);

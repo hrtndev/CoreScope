@@ -171,7 +171,7 @@ const tick = () => new Promise(r => setTimeout(r, 0));
   graphData = { edges: [] };
   el = makeEl();
   await M.renderMyRepeatersTab(el);
-  assert(/1 favorite not shown with the active region\/area filter/.test(el.innerHTML),
+  assert(/1 favorite not shown with the active IATA region\/area filter/.test(el.innerHTML),
     'hidden favorite is surfaced with a causally-neutral "not shown" notice');
   assert(!/outside the active/.test(el.innerHTML),
     'notice no longer claims the favorite is "outside" the filter (could be deleted/client)');
