@@ -68,6 +68,14 @@ function createScopeCoverageOverlay(map, opts) {
   var data = null; // last-fetched /api/scope-coverage response, kept for theme re-render
   var shapesByName = null; // region name -> its Leaflet shape, for highlight wiring
   var hoverTooltip = null; // shared tooltip instance for the map-level mousemove handler
+  // True once the layer has actually been built and the map-level
+  // hover/click listeners registered — NOT the same as "data has been
+  // fetched". load() always fetches (needed just to know whether to
+  // reveal the checkbox at all), but building shapes + wiring
+  // mousemove/click is deferred until the overlay is actually turned on,
+  // so a page load with the toggle off (the default) does none of that
+  // work. See activate() below.
+  var activated = false;
 
   // Rough planar polygon area (shoelace formula) — not a real geographic
   // measurement, just a relative size used to (a) paint larger regions
@@ -264,6 +272,20 @@ function createScopeCoverageOverlay(map, opts) {
     L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent(container).openOn(map);
   }
 
+  // Builds the layer and wires the map-level hover/click listeners.
+  // Idempotent — safe to call from both the checkbox's 'change' handler
+  // and load()'s localStorage-restore path without double-registering.
+  // Deliberately NOT called just because data was fetched — only because
+  // the overlay is actually about to be shown, so a page load with the
+  // toggle off does none of this work.
+  function activate() {
+    if (activated) return;
+    activated = true;
+    render();
+    map.on('mousemove', onMouseMove);
+    map.on('click', onMapClick);
+  }
+
   async function load() {
     try {
       var resp = await api('/scope-coverage', { ttl: 30000 });
@@ -277,18 +299,25 @@ function createScopeCoverageOverlay(map, opts) {
         if (saved === 'true') el.checked = true;
         el.addEventListener('change', function (e) {
           localStorage.setItem(storageKey, e.target.checked);
-          if (!layer) return;
-          if (e.target.checked) { layer.addTo(map); } else { map.removeLayer(layer); }
+          if (e.target.checked) {
+            if (!activated) activate(); // first time on — builds + adds the layer + registers listeners
+            else if (layer) layer.addTo(map); // already built once — just re-show it
+          } else if (layer) {
+            map.removeLayer(layer);
+          }
         });
+        // Preserve "remembers your last setting" — if it was on last
+        // session, build it now rather than waiting for a click that
+        // isn't coming.
+        if (el.checked) activate();
       }
-      render();
-      map.on('mousemove', onMouseMove);
-      map.on('click', onMapClick);
     } catch (e) { /* no hash regions configured / endpoint unavailable */ }
   }
 
   function refreshTheme() {
-    render();
+    // Colors are baked into shape styles at render() time — nothing to
+    // refresh if the overlay was never turned on in the first place.
+    if (activated) render();
   }
 
   function destroy() {
