@@ -1955,6 +1955,12 @@ button.ch-item:hover .ch-icon-btn { opacity: 1; }
   flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
   font-size: 13px; background: var(--input-bg); color: var(--text); font-family: var(--font);
 }
+/* #nodesRegionFilter/#nodesAreaFilter are siblings of .nodes-topbar, not
+ * children of it, so they don't inherit its 12px 16px padding and sit
+ * flush against the true page edge — most noticeable on the region
+ * filter's "IATA:" label, whose leading I has near-zero left-bearing and
+ * reads as clipped right at x:0. Match the topbar's horizontal inset. */
+#nodesRegionFilter, #nodesAreaFilter { padding: 4px 16px 0; }
 .nodes-counts { display: flex; gap: 8px; flex-shrink: 0; }
 .node-count-pill {
   display: inline-block; padding: 3px 10px; border-radius: 12px;
