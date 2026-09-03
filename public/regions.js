@@ -96,7 +96,7 @@
     destroyed = false;
     container.innerHTML = pageHtml();
 
-    map = L.map('regionsMap', { zoomControl: true, attributionControl: false }).setView([37.0, -95.0], 4);
+    map = L.map('regionsMap', { zoomControl: false, attributionControl: false }).setView([37.0, -95.0], 4);
     if (typeof window._applyTilesToNodeMap === 'function') {
       window._applyTilesToNodeMap(map);
     } else {
