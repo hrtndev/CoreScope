@@ -16,6 +16,7 @@
   let heatLayer = null;
   let geoFilterLayer = null;
   let scopeCoverageOverlay = null; // see scope-coverage.js — createScopeCoverageOverlay(map, opts)
+  let countyOverlay = null; // see county-overlay.js — createCountyOverlay(map)
   let affinityLayer = null;
   let affinityData = null;
   let userHasMoved = false;
@@ -225,6 +226,7 @@
             <label for="mcMultiByte"><input type="checkbox" id="mcMultiByte"> Multi-byte support</label>
             <label id="mcGeoFilterLabel" for="mcGeoFilter" style="display:none"><input type="checkbox" id="mcGeoFilter"> Mesh live area</label>
             <label id="mcScopeCoverageLabel" for="mcScopeCoverage" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="mcScopeCoverage"> Region coverage <span class="badge badge-new">Beta</span></label>
+            <label for="mcCountyOverlay" title="Tennessee county boundaries (reference geography only)"><input type="checkbox" id="mcCountyOverlay"> County lines</label>
           </fieldset>
           <div id="mapAreaFilter"></div>
           <fieldset class="mc-section">
@@ -621,6 +623,19 @@
       storageKey: 'meshcore-map-scope-coverage'
     });
     scopeCoverageOverlay.load();
+
+    // Tennessee county boundary overlay — see county-overlay.js. Default off.
+    countyOverlay = createCountyOverlay(map);
+    (function initCountyOverlayToggle() {
+      var el = document.getElementById('mcCountyOverlay');
+      if (!el) return;
+      var saved = localStorage.getItem('meshcore-map-county-overlay');
+      if (saved === 'true') { el.checked = true; countyOverlay.load(); }
+      el.addEventListener('change', function (e) {
+        localStorage.setItem('meshcore-map-county-overlay', e.target.checked);
+        if (e.target.checked) countyOverlay.load(); else countyOverlay.hide();
+      });
+    })();
 
     // WS for live advert updates
     wsHandler = debouncedOnWS(function (msgs) {
@@ -1988,6 +2003,7 @@
     if (heatLayer) { heatLayer = null; }
     geoFilterLayer = null;
     if (scopeCoverageOverlay) { scopeCoverageOverlay.destroy(); scopeCoverageOverlay = null; }
+    if (countyOverlay) { countyOverlay.destroy(); countyOverlay = null; }
     selectedReferenceNode = null;
     neighborPubkeys = null;
     delete window._mapSelectRefNode;

@@ -2630,6 +2630,25 @@ button.ch-item:hover .ch-icon-btn { opacity: 1; }
 .leaflet-popup-tip { background: var(--card-bg) !important; }
 .leaflet-popup-content { color: var(--text) !important; font-size: 13px !important; }
 
+/* County overlay hover label — reads as a map label, not a popup callout:
+   no box/border/arrow, just muted text with a soft shadow for contrast
+   against whatever tile is underneath. */
+.leaflet-tooltip.county-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  color: var(--text-muted, #94a3b8) !important;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  text-shadow:
+    0 0 3px var(--card-bg, #fff), 0 0 3px var(--card-bg, #fff),
+    0 0 6px var(--card-bg, #fff);
+  pointer-events: none;
+}
+.leaflet-tooltip.county-tooltip::before { display: none !important; }
+
 /* For Leaflet layer control */
 .leaflet-control-layers,
 .leaflet-control-layers-expanded {
@@ -5567,6 +5586,75 @@ body { touch-action: pan-y; }
   color: var(--mc-route-legend-fg);
   opacity: 0.75;
 }
+/* Regions page legend (public/regions.js) — lists every region the
+   coverage overlay is currently drawing; clicking a row isolates that
+   region's shape + node markers (scopeCoverageOverlay.setRegionFilter).
+   Reuses the route-legend's theme-aware color vars for visual consistency
+   rather than inventing a parallel set. */
+.regions-legend {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 700;
+  width: 200px;
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  background: var(--mc-route-legend-bg);
+  color: var(--mc-route-legend-fg);
+  border: 1px solid var(--mc-route-legend-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font: 12px/1.4 system-ui, sans-serif;
+}
+.regions-legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mc-route-legend-border);
+  font-weight: 700;
+}
+.regions-legend-reset {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--mc-route-legend-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: 600 11px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+.regions-legend-reset:hover { opacity: 0.8; }
+.regions-legend-list {
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.regions-legend-empty {
+  padding: 8px 10px;
+  opacity: 0.75;
+}
+.regions-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.regions-legend-row:hover { background: rgba(128, 128, 128, 0.15); }
+.regions-legend-row:focus-visible { outline: 2px solid #06b6d4; outline-offset: -2px; }
+.regions-legend-row.active { background: rgba(6, 182, 212, 0.18); font-weight: 700; }
+.regions-legend-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.regions-legend-count { opacity: 0.75; }
+@media (max-width: 640px) {
+  .regions-legend { width: 150px; max-height: 45%; font-size: 11px; }
+}
+
 .mc-route-resolved-badge {
   display: inline-block;
   padding: 2px 6px;

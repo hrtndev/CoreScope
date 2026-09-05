@@ -77,6 +77,19 @@ function createScopeCoverageOverlay(map, opts) {
   // work. See activate() below.
   var activated = false;
 
+  // Region name to isolate, or null to show every region. Set via
+  // setRegionFilter() (e.g. from a page-level legend) — consumed by both
+  // render() (which shape to draw) and _polygonMatchesAt() (which regions
+  // hover/click can find), so a filtered-out region is fully inert, not
+  // just invisible.
+  var activeRegionFilter = null;
+
+  function _visibleRegions() {
+    if (!data || !data.regions) return [];
+    if (!activeRegionFilter) return data.regions;
+    return data.regions.filter(function (r) { return r.name === activeRegionFilter; });
+  }
+
   // Rough planar polygon area (shoelace formula) — not a real geographic
   // measurement, just a relative size used to (a) paint larger regions
   // first so they sit visually "under" smaller ones by default, and (b)
@@ -117,8 +130,7 @@ function createScopeCoverageOverlay(map, opts) {
   // be drawn on top, so a region buried under several others at a given
   // pixel is still found here. Sorted smallest-area first (most specific).
   function _polygonMatchesAt(latlng) {
-    if (!data || !data.regions) return [];
-    return data.regions
+    return _visibleRegions()
       .filter(function (r) { return r.hull && r.hull.length >= 3 && _pointInHull(latlng, r.hull); })
       .sort(function (a, b) { return _hullArea(a.hull) - _hullArea(b.hull); });
   }
@@ -147,11 +159,12 @@ function createScopeCoverageOverlay(map, opts) {
   function render() {
     if (layer) { map.removeLayer(layer); layer = null; }
     shapesByName = {};
-    if (!data || !data.regions || !data.regions.length) return;
+    var visibleRegions = _visibleRegions();
+    if (!visibleRegions.length) return;
     var theme = scopeCoverageIsDarkTheme() ? 'dark' : 'light';
 
     // Largest-area first so smaller/nested regions draw on top — see _hullArea.
-    var regionsByZOrder = data.regions.slice().sort(function (a, b) {
+    var regionsByZOrder = visibleRegions.slice().sort(function (a, b) {
       return _hullArea(b.hull) - _hullArea(a.hull);
     });
 
@@ -320,6 +333,23 @@ function createScopeCoverageOverlay(map, opts) {
     if (activated) render();
   }
 
+  // Isolates a single region — every other region's shape stops being
+  // drawn AND stops being hit-testable (see _visibleRegions() above), so a
+  // filtered-out region can't be hovered/clicked just because it's still
+  // technically on the map under lower opacity. Pass a falsy name (or call
+  // clearRegionFilter()) to show every region again. No-op until the
+  // overlay is activated — there's no layer to rebuild yet.
+  function setRegionFilter(name) {
+    activeRegionFilter = name || null;
+    if (activated) render();
+  }
+  function clearRegionFilter() { setRegionFilter(null); }
+
+  // The full, unfiltered region list from the last successful load() — for
+  // a page-level legend to enumerate every region the overlay knows about,
+  // independent of the current filter.
+  function getRegions() { return (data && data.regions) || []; }
+
   function destroy() {
     if (layer) { map.removeLayer(layer); layer = null; }
     map.off('mousemove', onMouseMove);
@@ -327,7 +357,11 @@ function createScopeCoverageOverlay(map, opts) {
     data = null;
     shapesByName = null;
     hoverTooltip = null;
+    activeRegionFilter = null;
   }
 
-  return { load: load, refreshTheme: refreshTheme, destroy: destroy };
+  return {
+    load: load, refreshTheme: refreshTheme, destroy: destroy,
+    setRegionFilter: setRegionFilter, clearRegionFilter: clearRegionFilter, getRegions: getRegions
+  };
 }

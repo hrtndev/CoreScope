@@ -198,6 +198,7 @@
     "connectWS": "readonly",
     "copyToClipboard": "readonly",
     "createColoredHexDump": "readonly",
+    "createCountyOverlay": "readonly",
     "createScopeCoverageOverlay": "readonly",
     "currentPage": "readonly",
     "currentSkewValue": "readonly",
