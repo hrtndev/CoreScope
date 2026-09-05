@@ -66,7 +66,8 @@ function createCountyOverlay(map) {
       style: { color: color, weight: 1, opacity: 0.45, fill: true, fillOpacity: 0.02 },
       onEachFeature: function (feature, shape) {
         var name = feature && feature.properties && (feature.properties.NAMELSAD || feature.properties.NAME);
-        if (name) shape.bindTooltip(name, { direction: 'center', className: 'county-tooltip', opacity: 1, sticky: false });
+        var esc = (typeof escapeHtml === 'function') ? escapeHtml : function (s) { return String(s); };
+        if (name) shape.bindTooltip(esc(name), { direction: 'center', className: 'county-tooltip', opacity: 1, sticky: false });
       }
     }).addTo(map);
   }
