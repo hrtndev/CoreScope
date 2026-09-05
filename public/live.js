@@ -19,6 +19,7 @@
 
   let map, ws, nodesLayer, pathsLayer, animLayer, heatLayer, geoFilterLayer, clickablePathsLayer;
   let scopeCoverageOverlay = null; // see scope-coverage.js — createScopeCoverageOverlay(map, opts)
+  let countyOverlay = null; // see county-overlay.js — createCountyOverlay(map)
   // New animation canvas
   let animCanvas, animCtx;
   let _dprMedia = null;
@@ -1154,6 +1155,7 @@
             <span id="multibyteDesc" class="sr-only">Show only multibyte (≥2-byte path-hash) packets; hide unreliable single-byte traffic</span>
             <label id="liveGeoFilterLabel" style="display:none"><input type="checkbox" id="liveGeoFilterToggle"> Mesh live area</label>
             <label id="liveScopeCoverageLabel" for="liveScopeCoverageToggle" title="Convex hull of repeaters/rooms that have relayed traffic for each MeshCore hash region — an inferred coverage area, not an authoritative boundary" style="display:none"><input type="checkbox" id="liveScopeCoverageToggle"> Region coverage <span class="badge badge-new">Beta</span></label>
+            <label for="liveCountyOverlayToggle" title="Tennessee county boundaries (reference geography only)"><input type="checkbox" id="liveCountyOverlayToggle"> County lines</label>
             </div>
             <div class="live-toggles">
               <div class="live-node-filter-wrap" style="position:relative">
@@ -1862,6 +1864,19 @@
       storageKey: 'meshcore-live-scope-coverage'
     });
     scopeCoverageOverlay.load();
+
+    // Tennessee county boundary overlay — see county-overlay.js. Default off.
+    countyOverlay = createCountyOverlay(map);
+    (function initCountyOverlayToggle() {
+      var el = document.getElementById('liveCountyOverlayToggle');
+      if (!el) return;
+      var saved = localStorage.getItem('meshcore-live-county-overlay');
+      if (saved === 'true') { el.checked = true; countyOverlay.load(); }
+      el.addEventListener('change', function (e) {
+        localStorage.setItem('meshcore-live-county-overlay', e.target.checked);
+        if (e.target.checked) countyOverlay.load(); else countyOverlay.hide();
+      });
+    })();
 
     const matrixToggle = document.getElementById('liveMatrixToggle');
     matrixToggle.checked = matrixMode;
@@ -4529,6 +4544,7 @@
       regionFilterChangeHandler = null;
     }
     if (scopeCoverageOverlay) { scopeCoverageOverlay.destroy(); scopeCoverageOverlay = null; }
+    if (countyOverlay) { countyOverlay.destroy(); countyOverlay = null; }
     if (map) { map.remove(); map = null; }
     if (_onResize) {
       window.removeEventListener('resize', _onResize);
