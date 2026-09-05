@@ -90,6 +90,20 @@
   // customizer dark-tile-provider pick (#1420/#1430). Falls back to
   // window.getTileUrl() output if the registry isn't loaded. Also applies
   // the provider's invert CSS filter to the tile pane when needed.
+  //
+  // Self-heals on 'mc-tile-provider-changed' (fired once the async
+  // /api/config/client fetch resolves and rebuilds the tile registry with
+  // the real Carto API key — see roles.js/map-tile-providers.js). Without
+  // this, a map built via this helper BEFORE that fetch resolves is stuck
+  // on the unkeyed cartocdn fallback (watermarked tiles) for the rest of
+  // the page view: map.js/live.js already re-sync their own tile layer on
+  // this event, but every OTHER map built through this shared helper
+  // (regions.js, rx-coverage.js, node-reach-map.js, the node-detail inset
+  // map right here) did not, and that race is won or lost depending on
+  // whether script execution or the config fetch finishes first — which
+  // flips easily on a warm disk-cache reload (all the versioned <script>
+  // tags load instantly; the uncached config JSON still needs a real
+  // network round trip).
   function _applyTilesToNodeMap(map) {
     if (!map) return;
     var tileUrl = (window.getTileUrl && window.getTileUrl()) || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -97,14 +111,39 @@
     var attribution = (provider && provider.attribution) || '© OpenStreetMap contributors';
     var layer = L.tileLayer(tileUrl, { maxZoom: 18, attribution: attribution }).addTo(map);
     // Esri 2-layer provider: add the labels reference overlay too
+    var refLayer = null;
     if (provider && provider.refUrl) {
-      try { L.tileLayer(provider.refUrl, { maxZoom: 18 }).addTo(map); } catch (_e) {}
+      try { refLayer = L.tileLayer(provider.refUrl, { maxZoom: 18 }).addTo(map); } catch (_e) {}
     }
     // Apply invert CSS filter to the tile pane if the provider needs it
     try {
       var pane = map.getPane && map.getPane('tilePane');
       if (pane) pane.style.filter = (provider && provider.invertFilter) ? provider.invertFilter : '';
     } catch (_e) {}
+
+    function onProviderChanged() {
+      var url = (window.getTileUrl && window.getTileUrl()) || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      layer.setUrl(url);
+      var p = window.getActiveTileProvider && window.getActiveTileProvider();
+      try {
+        var pane2 = map.getPane && map.getPane('tilePane');
+        if (pane2) pane2.style.filter = (p && p.invertFilter) ? p.invertFilter : '';
+      } catch (_e) {}
+      if (p && p.refUrl) {
+        if (refLayer) refLayer.setUrl(p.refUrl);
+        else { try { refLayer = L.tileLayer(p.refUrl, { maxZoom: 18 }).addTo(map); } catch (_e) {} }
+      } else if (refLayer) {
+        try { map.removeLayer(refLayer); } catch (_e) {}
+        refLayer = null;
+      }
+    }
+    window.addEventListener('mc-tile-provider-changed', onProviderChanged);
+    // Leaflet fires 'unload' at the start of map.remove() — every caller of
+    // this helper already calls that on page/modal teardown, so this rides
+    // along for free instead of requiring each of the 4 call sites to wire
+    // their own cleanup.
+    map.on('unload', function () { window.removeEventListener('mc-tile-provider-changed', onProviderChanged); });
+
     return layer;
   }
   // Exposed so the node-reach link-map (node-reach-map.js) reuses the user's
