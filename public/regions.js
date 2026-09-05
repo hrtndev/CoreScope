@@ -136,10 +136,14 @@
         // ANY of their regions matches the active filter, not just their
         // primary (first-alphabetically) one.
         if (activeRegionFilter && regions.indexOf(activeRegionFilter) === -1) return;
-        // Primary color = first region alphabetically (server already
-        // sorts); the marker can only show one fill color, but hover/click
-        // always reveals the complete membership list.
-        var color = scopeCoverageRegionColor(regions[0]);
+        // Primary color = the active filter (if any) so an isolated
+        // region's markers always match its own legend swatch, even for
+        // boundary nodes whose alphabetically-first membership is a
+        // DIFFERENT region than the one just selected. Unfiltered, falls
+        // back to first region alphabetically (server already sorts); the
+        // marker can only show one fill color, but hover/click always
+        // reveals the complete membership list.
+        var color = scopeCoverageRegionColor(activeRegionFilter || regions[0]);
         var marker = L.circleMarker([node.lat, node.lon], {
           pane: 'regionsNodesPane',
           radius: 7, weight: 2, color: '#222', opacity: 0.8,
