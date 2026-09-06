@@ -2649,6 +2649,15 @@ button.ch-item:hover .ch-icon-btn { opacity: 1; }
 }
 .leaflet-tooltip.county-tooltip::before { display: none !important; }
 
+/* Each county's <path> is interactive only to give the hover tooltip a
+   real hit-region (see county-overlay.js) — not a genuine focusable
+   control, so suppress the browser's default focus outline a click
+   leaves on it (shows as a distracting "selection box" around whichever
+   county was last clicked). */
+.leaflet-countyOverlay-pane path:focus {
+  outline: none;
+}
+
 /* For Leaflet layer control */
 .leaflet-control-layers,
 .leaflet-control-layers-expanded {

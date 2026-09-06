@@ -9,13 +9,22 @@
 // hover/click: that overlay listens on the MAP itself (not per-shape), so
 // it keeps firing regardless of what a county polygon's own hover does.
 //
-// Drawn in a dedicated pane (z-index 450) above Leaflet's default
+// Drawn in a dedicated pane (z-index 420) above Leaflet's default
 // overlayPane (400), where scope-coverage's region hulls live — so county
 // lines always stay visible on top of them. This can't be done by simply
 // adding the county layer after the coverage layer: scope-coverage.js
 // rebuilds and re-adds its layer (map.removeLayer + addTo) on activation,
 // theme refresh, and every region-filter change, which would otherwise
 // bump it back above the counties each time.
+//
+// 420, NOT 450: regions.js's node markers live in their own pane at
+// z-index 450 (see regionsNodesPane in regions.js), specifically so they
+// sit above the coverage overlay too. Two panes tied at the same z-index
+// break the tie by DOM insertion order, and counties load after that pane
+// is created — so a 450 here would win the tie and its interactive (if
+// visually near-invisible) fill would sit on top, silently swallowing
+// clicks meant for the node markers underneath. 420 keeps counties above
+// the coverage hulls while staying below anything using 450+.
 //
 // Usage (per Leaflet map instance):
 //   const counties = createCountyOverlay(map);
@@ -57,7 +66,7 @@ function createCountyOverlay(map) {
     }
     if (!map.getPane('countyOverlayPane')) {
       map.createPane('countyOverlayPane');
-      map.getPane('countyOverlayPane').style.zIndex = 450;
+      map.getPane('countyOverlayPane').style.zIndex = 420;
     }
     var color = cssVar('--text-muted', '#888');
     layer = L.geoJSON(geojson, {

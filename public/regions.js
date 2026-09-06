@@ -152,14 +152,16 @@
         var content = nodePopupHtml(node, regions);
         marker.bindTooltip(content, { sticky: true, direction: 'top', opacity: 0.95 });
         marker.bindPopup(content, { maxWidth: 260 });
-        // The coverage overlay listens for 'mousemove' on the MAP itself
-        // (see scope-coverage.js) so it can hit-test polygons regardless
-        // of DOM z-order — but that means it fires even while the cursor
-        // is over a marker sitting inside a region's fill, showing its
-        // own region-list tooltip on top of the marker's. Stop the native
-        // event bubbling to the map container while directly over a
-        // marker so only the marker's own tooltip shows.
+        // The coverage overlay listens for 'mousemove' AND 'click' on the
+        // MAP itself (see scope-coverage.js) so it can hit-test polygons
+        // regardless of DOM z-order — but that means both fire even when
+        // the cursor/click is on a marker sitting inside a region's fill,
+        // showing the overlay's own region-list tooltip/popup on top of
+        // (click: instead of) the marker's. Stop native event bubbling to
+        // the map container while directly over a marker so only the
+        // marker's own tooltip/popup shows.
         marker.on('mousemove', L.DomEvent.stopPropagation);
+        marker.on('click', L.DomEvent.stopPropagation);
         bounds.push([node.lat, node.lon]);
       });
 
